@@ -1,4 +1,4 @@
-module Article exposing (Article, Full, Preview, author, body, favorite, favoriteButton, fetch, fromPreview, fullDecoder, mapAuthor, metadata, previewDecoder, slug, unfavorite, unfavoriteButton)
+module Article exposing (Article, Full, Preview, author, body, fetch, fromPreview, fullDecoder, mapAuthor, metadata, previewDecoder, slug)
 
 {-| The interface to the Article data structure.
 
@@ -96,8 +96,6 @@ type alias Metadata =
     , title : String
     , tags : List String
     , createdAt : Time.Posix
-    , favorited : Bool
-    , favoritesCount : Int
     }
 
 
@@ -195,8 +193,6 @@ metadataDecoder =
         |> required "title" Decode.string
         |> required "tagList" (Decode.list Decode.string)
         |> required "createdAt" Iso8601.decoder
-        |> required "favorited" Decode.bool
-        |> required "favoritesCount" Decode.int
 
 
 
@@ -207,66 +203,3 @@ fetch : Maybe Cred -> Slug -> Http.Request (Article Full)
 fetch maybeCred articleSlug =
     Decode.field "article" (fullDecoder maybeCred)
         |> Api.get (Endpoint.article articleSlug) maybeCred
-
-
-
--- FAVORITE
-
-
-favorite : Slug -> Cred -> Http.Request (Article Preview)
-favorite articleSlug cred =
-    Api.post (Endpoint.favorite articleSlug) (Just cred) Http.emptyBody (faveDecoder cred)
-
-
-unfavorite : Slug -> Cred -> Http.Request (Article Preview)
-unfavorite articleSlug cred =
-    Api.delete (Endpoint.favorite articleSlug) cred Http.emptyBody (faveDecoder cred)
-
-
-faveDecoder : Cred -> Decoder (Article Preview)
-faveDecoder cred =
-    Decode.field "article" (previewDecoder (Just cred))
-
-
-{-| This is a "build your own element" API.
-
-You pass it some configuration, followed by a `List (Attribute msg)` and a
-`List (Html msg)`, just like any standard Html element.
-
--}
-favoriteButton :
-    Cred
-    -> msg
-    -> List (Attribute msg)
-    -> List (Html msg)
-    -> Html msg
-favoriteButton _ msg attrs kids =
-    toggleFavoriteButton "btn btn-sm btn-outline-primary" msg attrs kids
-
-
-unfavoriteButton :
-    Cred
-    -> msg
-    -> List (Attribute msg)
-    -> List (Html msg)
-    -> Html msg
-unfavoriteButton _ msg attrs kids =
-    toggleFavoriteButton "btn btn-sm btn-primary" msg attrs kids
-
-
-toggleFavoriteButton :
-    String
-    -> msg
-    -> List (Attribute msg)
-    -> List (Html msg)
-    -> Html msg
-toggleFavoriteButton classStr msg attrs kids =
-    Html.button
-        (class classStr :: onClickStopPropagation msg :: attrs)
-        (i [ class "ion-heart" ] [] :: kids)
-
-
-onClickStopPropagation : msg -> Attribute msg
-onClickStopPropagation msg =
-    stopPropagationOn "click"
-        (Decode.succeed ( msg, True ))

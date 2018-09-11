@@ -3,7 +3,7 @@ module Page.Article exposing (Model, Msg, init, subscriptions, toSession, update
 {-| Viewing an individual article.
 -}
 
-import Api exposing (Cred)
+import Api exposing (Cred, Role(..))
 import Api.Endpoint as Endpoint
 import Article exposing (Article, Full, Preview)
 import Article.Body exposing (Body)
@@ -47,6 +47,39 @@ type Status a
     | LoadingSlowly
     | Loaded a
     | Failed
+
+
+{-| A regular user is only allowed to see his meals.
+A manager is only allowed to see his meals.
+An admin can see all users' meals
+Unlogged viewers can't see profiles.
+Those that are not authorized will be redirected to home screen.
+-}
+checkPermissions : Session -> Username -> Cmd Msg
+checkPermissions session profileUsername =
+    let
+        redirectToHome =
+            Route.replaceUrl (Session.navKey session) Route.Home
+    in
+        session
+            |> Session.cred
+            |> Maybe.map (\cred -> ( Api.username cred, Api.role cred ))
+            |> Maybe.map
+                (\( username, role ) ->
+                    case role of
+                        Regular ->
+                            if username == profileUsername then
+                                Cmd.none
+                            else
+                                redirectToHome
+
+                        Manager ->
+                            redirectToHome
+
+                        Admin ->
+                            Cmd.none
+                )
+            |> Maybe.withDefault redirectToHome
 
 
 init : Session -> Slug -> ( Model, Cmd Msg )
@@ -126,18 +159,6 @@ view model =
                                     [ Article.Body.toHtml (Article.body article) [] ]
                                 ]
                             , hr [] []
-                            , div [ class "article-actions" ]
-                                [ div [ class "article-meta" ] <|
-                                    List.append
-                                        [ a [ Route.href (Route.Profile (Author.username author)) ]
-                                            [ img [ Avatar.src avatar ] [] ]
-                                        , div [ class "info" ]
-                                            [ Author.view (Author.username author)
-                                            , Timestamp.view model.timeZone (Article.metadata article).createdAt
-                                            ]
-                                        ]
-                                        buttons
-                                ]
                             ]
                         ]
                 }
@@ -152,26 +173,38 @@ view model =
             { title = "Article", content = Loading.error "article" }
 
 
+isSameUser : Cred -> Author -> Bool
+isSameUser cred author =
+    Api.username cred == Author.username author
+
+
 viewButtons : Cred -> Article Full -> Author -> List (Html Msg)
 viewButtons cred article author =
-    case author of
-        IsFollowing followedAuthor ->
-            [ Author.unfollowButton ClickedUnfollow cred followedAuthor
-            , text " "
-            , favoriteButton cred article
+    let
+        defaultButtons =
+            [ text ""
+            , text ""
+            , text ""
             ]
+    in
+        case Api.role cred of
+            Admin ->
+                [ editButton article
+                , text " "
+                , deleteButton cred article
+                ]
 
-        IsNotFollowing unfollowedAuthor ->
-            [ Author.followButton ClickedFollow cred unfollowedAuthor
-            , text " "
-            , favoriteButton cred article
-            ]
+            Manager ->
+                defaultButtons
 
-        IsViewer _ _ ->
-            [ editButton article
-            , text " "
-            , deleteButton cred article
-            ]
+            Regular ->
+                if isSameUser cred author then
+                    [ editButton article
+                    , text " "
+                    , deleteButton cred article
+                    ]
+                else
+                    defaultButtons
 
 
 
@@ -181,13 +214,10 @@ viewButtons cred article author =
 type Msg
     = ClickedDeleteArticle Cred Slug
     | ClickedDismissErrors
-    | ClickedFavorite Cred Slug Body
-    | ClickedUnfavorite Cred Slug Body
     | ClickedFollow Cred UnfollowedAuthor
     | ClickedUnfollow Cred FollowedAuthor
     | CompletedLoadArticle (Result Http.Error (Article Full))
     | CompletedDeleteArticle (Result Http.Error ())
-    | CompletedFavoriteChange (Result Http.Error (Article Full))
     | CompletedFollowChange (Result Http.Error Author)
     | GotTimeZone Time.Zone
     | GotSession Session
@@ -200,25 +230,11 @@ update msg model =
         ClickedDismissErrors ->
             ( { model | errors = [] }, Cmd.none )
 
-        ClickedFavorite cred slug body ->
-            ( model, fave Article.favorite cred slug body )
-
-        ClickedUnfavorite cred slug body ->
-            ( model, fave Article.unfavorite cred slug body )
-
         CompletedLoadArticle (Ok article) ->
             ( { model | article = Loaded article }, Cmd.none )
 
         CompletedLoadArticle (Err error) ->
             ( { model | article = Failed }
-            , Log.error
-            )
-
-        CompletedFavoriteChange (Ok newArticle) ->
-            ( { model | article = Loaded newArticle }, Cmd.none )
-
-        CompletedFavoriteChange (Err error) ->
-            ( { model | errors = Api.addServerError model.errors }
             , Log.error
             )
 
@@ -313,35 +329,6 @@ toSession model =
 
 
 -- INTERNAL
-
-
-fave : (Slug -> Cred -> Http.Request (Article Preview)) -> Cred -> Slug -> Body -> Cmd Msg
-fave toRequest cred slug body =
-    toRequest slug cred
-        |> Http.toTask
-        |> Task.map (Article.fromPreview body)
-        |> Task.attempt CompletedFavoriteChange
-
-
-favoriteButton : Cred -> Article Full -> Html Msg
-favoriteButton cred article =
-    let
-        { favoritesCount, favorited } =
-            Article.metadata article
-
-        slug =
-            Article.slug article
-
-        body =
-            Article.body article
-
-        kids =
-            [ text (" Favorite Article (" ++ String.fromInt favoritesCount ++ ")") ]
-    in
-        if favorited then
-            Article.unfavoriteButton cred (ClickedUnfavorite cred slug body) [] kids
-        else
-            Article.favoriteButton cred (ClickedFavorite cred slug body) [] kids
 
 
 deleteButton : Cred -> Article a -> Html Msg

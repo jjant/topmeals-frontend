@@ -3,7 +3,6 @@ module Api.Endpoint
         ( Endpoint
         , article
         , articles
-        , favorite
         , feed
         , follow
         , login
@@ -103,11 +102,6 @@ follow uname =
 article : Slug -> Endpoint
 article slug =
     url [ "articles", Slug.toString slug ] []
-
-
-favorite : Slug -> Endpoint
-favorite slug =
-    url [ "articles", Slug.toString slug, "favorite" ] []
 
 
 articles : List QueryParameter -> Endpoint

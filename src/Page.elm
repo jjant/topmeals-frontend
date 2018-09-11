@@ -52,9 +52,7 @@ viewHeader page maybeViewer =
         [ div [ class "container" ]
             [ a [ class "navbar-brand", Route.href Route.Home ]
                 [ text "TopMeals" ]
-            , ul [ class "nav navbar-nav pull-xs-right" ] <|
-                navbarLink page Route.Home [ text "Home" ]
-                    :: viewMenu page maybeViewer
+            , ul [ class "nav navbar-nav pull-xs-right" ] (viewMenu page maybeViewer)
             ]
         ]
 
@@ -74,7 +72,8 @@ viewMenu page maybeViewer =
                 avatar =
                     Viewer.avatar viewer
             in
-              [ linkTo Route.NewArticle [ i [ class "ion-compose" ] [], text "\u{00A0}New Meal" ]
+              [navbarLink page Route.Home [ text "Home" ]
+              , linkTo Route.NewArticle [ i [ class "ion-compose" ] [], text "\u{00A0}New Meal" ]
               , linkTo Route.Settings [ i [ class "ion-gear-a" ] [], text "\u{00A0}Settings" ]
               , linkTo
                   (Route.Profile username)

@@ -30,6 +30,7 @@ import Task exposing (Task)
 import Time
 import Url.Builder
 import Username exposing (Username)
+import Route
 import Meal exposing (Meal, meals)
 
 
@@ -61,6 +62,16 @@ type FeedTab
     | AllUsers
 
 
+checkLoggedIn : Session -> Cmd Msg
+checkLoggedIn session =
+    case Session.cred session of
+        Just _ ->
+            Cmd.none
+
+        Nothing ->
+            Route.replaceUrl (Session.navKey session) Route.Login
+
+
 init : Session -> ( Model, Cmd Msg )
 init session =
     let
@@ -80,7 +91,8 @@ init session =
           , meals = Loaded meals
           }
         , Cmd.batch
-            [ fetchFeed session feedTab 1
+            [ checkLoggedIn session
+            , fetchFeed session feedTab 1
                 |> Task.attempt CompletedFeedLoad
             , Task.perform GotTimeZone Time.here
             , Task.perform (\_ -> PassedSlowLoadThreshold) Loading.slowThreshold
