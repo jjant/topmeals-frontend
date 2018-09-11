@@ -146,7 +146,7 @@ view model =
             { title = "Article", content = text "" }
 
         LoadingSlowly ->
-            { title = "Article", content = Loading.icon }
+            { title = "Article", content = Loading.centeredIcon }
 
         Failed ->
             { title = "Article", content = Loading.error "article" }

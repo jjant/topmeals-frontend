@@ -26,7 +26,6 @@ import Username exposing (Username)
 import Viewer exposing (Viewer)
 
 
-
 -- MODEL
 
 
@@ -34,18 +33,12 @@ type alias Model =
     { session : Session
     , timeZone : Time.Zone
     , errors : List String
-    , feedTab : FeedTab
     , feedPage : Int
 
     -- Loaded independently from server
     , author : Status Author
     , feed : Status Feed.Model
     }
-
-
-type FeedTab
-    = MyArticles
-    | FavoritedArticles
 
 
 type Status a
@@ -61,24 +54,23 @@ init session username =
         maybeCred =
             Session.cred session
     in
-    ( { session = session
-      , timeZone = Time.utc
-      , errors = []
-      , feedTab = defaultFeedTab
-      , feedPage = 1
-      , author = Loading username
-      , feed = Loading username
-      }
-    , Cmd.batch
-        [ Author.fetch username maybeCred
-            |> Http.toTask
-            |> Task.mapError (Tuple.pair username)
-            |> Task.attempt CompletedAuthorLoad
-        , fetchFeed session defaultFeedTab username 1
-        , Task.perform GotTimeZone Time.here
-        , Task.perform (\_ -> PassedSlowLoadThreshold) Loading.slowThreshold
-        ]
-    )
+        ( { session = session
+          , timeZone = Time.utc
+          , errors = []
+          , feedPage = 1
+          , author = Loading username
+          , feed = Loading username
+          }
+        , Cmd.batch
+            [ Author.fetch username maybeCred
+                |> Http.toTask
+                |> Task.mapError (Tuple.pair username)
+                |> Task.attempt CompletedAuthorLoad
+            , fetchFeed session username 1
+            , Task.perform GotTimeZone Time.here
+            , Task.perform (\_ -> PassedSlowLoadThreshold) Loading.slowThreshold
+            ]
+        )
 
 
 currentUsername : Model -> Username
@@ -97,28 +89,18 @@ currentUsername model =
             username
 
 
-defaultFeedTab : FeedTab
-defaultFeedTab =
-    MyArticles
-
-
 
 -- HTTP
 
 
-fetchFeed : Session -> FeedTab -> Username -> Int -> Cmd Msg
-fetchFeed session feedTabs username page =
+fetchFeed : Session -> Username -> Int -> Cmd Msg
+fetchFeed session username page =
     let
         maybeCred =
             Session.cred session
 
         firstParam =
-            case feedTabs of
-                MyArticles ->
-                    Url.Builder.string "author" (Username.toString username)
-
-                FavoritedArticles ->
-                    Url.Builder.string "favorited" (Username.toString username)
+            Url.Builder.string "author" (Username.toString username)
 
         params =
             firstParam :: PaginatedList.params { page = page, resultsPerPage = articlesPerPage }
@@ -126,11 +108,11 @@ fetchFeed session feedTabs username page =
         expect =
             Feed.decoder maybeCred articlesPerPage
     in
-    Api.get (Endpoint.articles params) maybeCred expect
-        |> Http.toTask
-        |> Task.map (Feed.init session)
-        |> Task.mapError (Tuple.pair username)
-        |> Task.attempt CompletedFeedLoad
+        Api.get (Endpoint.articles params) maybeCred expect
+            |> Http.toTask
+            |> Task.map (Feed.init session)
+            |> Task.mapError (Tuple.pair username)
+            |> Task.attempt CompletedFeedLoad
 
 
 articlesPerPage : Int
@@ -165,84 +147,66 @@ view model =
                 Failed username ->
                     titleForMe (Session.cred model.session) username
     in
-    { title = title
-    , content =
-        case model.author of
-            Loaded author ->
-                let
-                    profile =
-                        Author.profile author
+        { title = title
+        , content =
+            case model.author of
+                Loaded author ->
+                    let
+                        profile =
+                            Author.profile author
 
-                    username =
-                        Author.username author
-
-                    followButton =
-                        case Session.cred model.session of
-                            Just cred ->
-                                case author of
-                                    IsViewer _ _ ->
-                                        -- We can't follow ourselves!
-                                        text ""
-
-                                    IsFollowing followedAuthor ->
-                                        Author.unfollowButton ClickedUnfollow cred followedAuthor
-
-                                    IsNotFollowing unfollowedAuthor ->
-                                        Author.followButton ClickedFollow cred unfollowedAuthor
-
-                            Nothing ->
-                                -- We can't follow if we're logged out
-                                text ""
-                in
-                div [ class "profile-page" ]
-                    [ Page.viewErrors ClickedDismissErrors model.errors
-                    , div [ class "user-info" ]
-                        [ div [ class "container" ]
-                            [ div [ class "row" ]
-                                [ div [ class "col-xs-12 col-md-10 offset-md-1" ]
-                                    [ img [ class "user-img", Avatar.src (Profile.avatar profile) ] []
-                                    , h4 [] [ Username.toHtml username ]
-                                    , p [] [ text (Maybe.withDefault "" (Profile.bio profile)) ]
-                                    , followButton
-                                    ]
-                                ]
-                            ]
-                        ]
-                    , case model.feed of
-                        Loaded feed ->
-                            div [ class "container" ]
-                                [ div [ class "row" ]
-                                    [ div [ class "col-xs-12 col-md-10 offset-md-1" ]
-                                        [ div [ class "articles-toggle" ] <|
-                                            List.concat
-                                                [ [ viewTabs model.feedTab ]
-                                                , Feed.viewArticles model.timeZone feed
-                                                    |> List.map (Html.map GotFeedMsg)
-                                                , [ Feed.viewPagination ClickedFeedPage model.feedPage feed ]
-                                                ]
+                        username =
+                            Author.username author
+                    in
+                        div [ class "profile-page" ]
+                            [ Page.viewErrors ClickedDismissErrors model.errors
+                            , div [ class "user-info" ]
+                                [ div [ class "container" ]
+                                    [ div [ class "row" ]
+                                        [ div [ class "col-xs-12 col-md-10 offset-md-1" ]
+                                            [ img [ class "user-img", Avatar.src (Profile.avatar profile) ] []
+                                            , h4 [] [ Username.toHtml username ]
+                                            , p [] [ text (Maybe.withDefault "" (Profile.bio profile)) ]
+                                            , p [] [ text <| "Calories per day: " ++ (String.fromInt <| Profile.calories profile) ++ " (cal)" ]
+                                            ]
                                         ]
                                     ]
                                 ]
+                            , case model.feed of
+                                Loaded feed ->
+                                    div [ class "container" ]
+                                        [ div [ class "row" ]
+                                            [ div [ class "col-xs-12 col-md-10 offset-md-1" ]
+                                                [ div [ class "articles-toggle" ] <|
+                                                    List.concat
+                                                        [ [ viewTabs ]
+                                                        , Feed.viewArticles model.timeZone feed
+                                                            |> List.map (Html.map GotFeedMsg)
+                                                        , [ Feed.viewPagination ClickedFeedPage model.feedPage feed ]
+                                                        ]
+                                                ]
+                                            ]
+                                        ]
 
-                        Loading _ ->
-                            text ""
+                                Loading _ ->
+                                    text ""
 
-                        LoadingSlowly _ ->
-                            Loading.icon
+                                LoadingSlowly _ ->
+                                    Loading.icon
 
-                        Failed _ ->
-                            Loading.error "feed"
-                    ]
+                                Failed _ ->
+                                    Loading.error "feed"
+                            ]
 
-            Loading _ ->
-                text ""
+                Loading _ ->
+                    text ""
 
-            LoadingSlowly _ ->
-                Loading.icon
+                LoadingSlowly _ ->
+                    Loading.icon
 
-            Failed _ ->
-                Loading.error "profile"
-    }
+                Failed _ ->
+                    Loading.error "profile"
+        }
 
 
 
@@ -260,7 +224,6 @@ titleForMe maybeCred username =
         Just cred ->
             if username == Api.username cred then
                 myProfileTitle
-
             else
                 defaultTitle
 
@@ -282,24 +245,9 @@ defaultTitle =
 -- TABS
 
 
-viewTabs : FeedTab -> Html Msg
-viewTabs tab =
-    case tab of
-        MyArticles ->
-            Feed.viewTabs [] myArticles [ favoritedArticles ]
-
-        FavoritedArticles ->
-            Feed.viewTabs [ myArticles ] favoritedArticles []
-
-
-myArticles : ( String, Msg )
-myArticles =
-    ( "My Articles", ClickedTab MyArticles )
-
-
-favoritedArticles : ( String, Msg )
-favoritedArticles =
-    ( "Favorited Articles", ClickedTab FavoritedArticles )
+viewTabs : Html Msg
+viewTabs =
+    Feed.viewTabs [] ( "My Meals", Ignore ) []
 
 
 
@@ -307,12 +255,9 @@ favoritedArticles =
 
 
 type Msg
-    = ClickedDismissErrors
-    | ClickedFollow Cred UnfollowedAuthor
-    | ClickedUnfollow Cred FollowedAuthor
-    | ClickedTab FeedTab
+    = Ignore
+    | ClickedDismissErrors
     | ClickedFeedPage Int
-    | CompletedFollowChange (Result Http.Error Author)
     | CompletedAuthorLoad (Result ( Username, Http.Error ) Author)
     | CompletedFeedLoad (Result ( Username, Http.Error ) Feed.Model)
     | GotTimeZone Time.Zone
@@ -324,39 +269,15 @@ type Msg
 update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
+        Ignore ->
+            ( model, Cmd.none )
+
         ClickedDismissErrors ->
             ( { model | errors = [] }, Cmd.none )
 
-        ClickedUnfollow cred followedAuthor ->
-            ( model
-            , Author.requestUnfollow followedAuthor cred
-                |> Http.send CompletedFollowChange
-            )
-
-        ClickedFollow cred unfollowedAuthor ->
-            ( model
-            , Author.requestFollow unfollowedAuthor cred
-                |> Http.send CompletedFollowChange
-            )
-
-        ClickedTab tab ->
-            ( { model | feedTab = tab }
-            , fetchFeed model.session tab (currentUsername model) 1
-            )
-
         ClickedFeedPage page ->
             ( { model | feedPage = page }
-            , fetchFeed model.session model.feedTab (currentUsername model) page
-            )
-
-        CompletedFollowChange (Ok newAuthor) ->
-            ( { model | author = Loaded newAuthor }
-            , Cmd.none
-            )
-
-        CompletedFollowChange (Err error) ->
-            ( model
-            , Log.error
+            , fetchFeed model.session (currentUsername model) page
             )
 
         CompletedAuthorLoad (Ok author) ->
@@ -384,9 +305,9 @@ update msg model =
                         ( newFeed, subCmd ) =
                             Feed.update (Session.cred model.session) subMsg feed
                     in
-                    ( { model | feed = Loaded newFeed }
-                    , Cmd.map GotFeedMsg subCmd
-                    )
+                        ( { model | feed = Loaded newFeed }
+                        , Cmd.map GotFeedMsg subCmd
+                        )
 
                 Loading _ ->
                     ( model, Log.error )
@@ -417,7 +338,7 @@ update msg model =
                         other ->
                             other
             in
-            ( { model | feed = feed }, Cmd.none )
+                ( { model | feed = feed }, Cmd.none )
 
 
 

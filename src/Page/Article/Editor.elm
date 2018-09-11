@@ -97,17 +97,17 @@ view model =
     { title =
         case getSlug model.status of
             Just slug ->
-                "Edit Article - " ++ Slug.toString slug
+                "Edit Meal - " ++ Slug.toString slug
 
             Nothing ->
-                "New Article"
+                "New Meal"
     , content =
         case Session.cred model.session of
             Just cred ->
                 viewAuthenticated cred model
 
             Nothing ->
-                text "Sign in to edit this article."
+                text "Sign in to edit this meal."
     }
 
 

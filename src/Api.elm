@@ -1,4 +1,23 @@
-port module Api exposing (Cred, addServerError, application, decodeErrors, delete, get, login, logout, post, put, register, settings, storeCredWith, username, viewerChanges)
+port module Api
+    exposing
+        ( Cred
+        , addServerError
+        , application
+        , decodeErrors
+        , delete
+        , get
+        , login
+        , logout
+        , post
+        , put
+        , register
+        , settings
+        , storeCredWith
+        , username
+        , role
+        , viewerChanges
+        , Role(..)
+        )
 
 {-| This module is responsible for communicating to the Conduit API.
 
@@ -12,10 +31,16 @@ import Browser
 import Browser.Navigation as Nav
 import Http exposing (Body, Expect)
 import Json.Decode as Decode exposing (Decoder, Value, decodeString, field, string)
-import Json.Decode.Pipeline as Pipeline exposing (optional, required)
+import Json.Decode.Pipeline as Pipeline exposing (optional, required, hardcoded)
 import Json.Encode as Encode
 import Url exposing (Url)
 import Username exposing (Username)
+
+
+type Role
+    = Regular
+    | Manager
+    | Admin
 
 
 
@@ -38,17 +63,42 @@ can't be!
 
 -}
 type Cred
-    = Cred Username String
+    = Cred Username String Role
 
 
 username : Cred -> Username
-username (Cred val _) =
+username (Cred val _ _) =
     val
 
 
 credHeader : Cred -> Http.Header
-credHeader (Cred _ str) =
+credHeader (Cred _ str _) =
     Http.header "authorization" ("Token " ++ str)
+
+
+role : Cred -> Role
+role (Cred _ _ r) =
+    r
+
+
+roleDecoder : Decoder Role
+roleDecoder =
+    string
+        |> Decode.andThen
+            (\string ->
+                case string of
+                    "Regular" ->
+                        Decode.succeed Regular
+
+                    "Manager" ->
+                        Decode.succeed Manager
+
+                    "Admin" ->
+                        Decode.succeed Admin
+
+                    _ ->
+                        Decode.fail "Invalid Role"
+            )
 
 
 {-| It's important that this is never exposed!
@@ -63,6 +113,9 @@ credDecoder =
     Decode.succeed Cred
         |> required "username" Username.decoder
         |> required "token" Decode.string
+        -- TODO: Add when api is ready
+        -- |> required "role" roleDecoder
+        |> hardcoded Admin
 
 
 
@@ -96,7 +149,7 @@ decodeFromChange viewerDecoder val =
 
 
 storeCredWith : Cred -> Avatar -> Cmd msg
-storeCredWith (Cred uname token) avatar =
+storeCredWith (Cred uname token _) avatar =
     let
         json =
             Encode.object
@@ -109,7 +162,7 @@ storeCredWith (Cred uname token) avatar =
                   )
                 ]
     in
-    storeCache (Just json)
+        storeCache (Just json)
 
 
 logout : Cmd msg
@@ -145,16 +198,16 @@ application viewerDecoder config =
                         |> Result.andThen (Decode.decodeString (storageDecoder viewerDecoder))
                         |> Result.toMaybe
             in
-            config.init maybeViewer url navKey
+                config.init maybeViewer url navKey
     in
-    Browser.application
-        { init = init
-        , onUrlChange = config.onUrlChange
-        , onUrlRequest = config.onUrlRequest
-        , subscriptions = config.subscriptions
-        , update = config.update
-        , view = config.view
-        }
+        Browser.application
+            { init = init
+            , onUrlChange = config.onUrlChange
+            , onUrlRequest = config.onUrlRequest
+            , subscriptions = config.subscriptions
+            , update = config.update
+            , view = config.view
+            }
 
 
 storageDecoder : Decoder (Cred -> viewer) -> Decoder viewer

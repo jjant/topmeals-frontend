@@ -99,12 +99,9 @@ viewArticles timeZone (Model { articles, session, errors }) =
         Page.viewErrors ClickedDismissErrors errors :: articlesHtml
 
 
-
--- TODO: See if I should handle TZ
-
-
 viewMeals : Time.Zone -> List Meal.Meal -> List (Html msg)
 viewMeals timeZone meals =
+    -- TODO: See if I should handle TZ
     List.map viewMeal meals
 
 
@@ -187,25 +184,6 @@ viewPreview maybeCred timeZone article =
 
         username =
             Author.username author
-
-        faveButton =
-            case maybeCred of
-                Just cred ->
-                    let
-                        { favoritesCount, favorited } =
-                            Article.metadata article
-
-                        viewButton =
-                            if favorited then
-                                Article.unfavoriteButton cred (ClickedUnfavorite cred slug)
-                            else
-                                Article.favoriteButton cred (ClickedFavorite cred slug)
-                    in
-                        viewButton [ class "pull-xs-right" ]
-                            [ text (" " ++ String.fromInt favoritesCount) ]
-
-                Nothing ->
-                    text ""
     in
         div [ class "article-preview" ]
             [ div [ class "article-meta" ]
@@ -215,14 +193,10 @@ viewPreview maybeCred timeZone article =
                     [ Author.view username
                     , Timestamp.view timeZone createdAt
                     ]
-                , faveButton
                 ]
             , a [ class "preview-link", Route.href (Route.Article (Article.slug article)) ]
                 [ h1 [] [ text title ]
                 , p [] [ text description ]
-                , span [] [ text "Read more..." ]
-                , ul [ class "tag-list" ]
-                    (List.map viewTag (Article.metadata article).tags)
                 ]
             ]
 
@@ -292,9 +266,6 @@ viewTag tagName =
 
 type Msg
     = ClickedDismissErrors
-    | ClickedFavorite Cred Slug
-    | ClickedUnfavorite Cred Slug
-    | CompletedFavorite (Result Http.Error (Article Preview))
 
 
 update : Maybe Cred -> Msg -> Model -> ( Model, Cmd Msg )
@@ -302,22 +273,6 @@ update maybeCred msg (Model model) =
     case msg of
         ClickedDismissErrors ->
             ( Model { model | errors = [] }, Cmd.none )
-
-        ClickedFavorite cred slug ->
-            fave Article.favorite cred slug model
-
-        ClickedUnfavorite cred slug ->
-            fave Article.unfavorite cred slug model
-
-        CompletedFavorite (Ok article) ->
-            ( Model { model | articles = PaginatedList.map (replaceArticle article) model.articles }
-            , Cmd.none
-            )
-
-        CompletedFavorite (Err error) ->
-            ( Model { model | errors = Api.addServerError model.errors }
-            , Cmd.none
-            )
 
 
 replaceArticle : Article a -> Article a -> Article a
@@ -343,16 +298,3 @@ pageCountDecoder : Int -> Decoder Int
 pageCountDecoder resultsPerPage =
     Decode.int
         |> Decode.map (\total -> ceiling (toFloat total / toFloat resultsPerPage))
-
-
-
--- INTERNAL
-
-
-fave : (Slug -> Cred -> Http.Request (Article Preview)) -> Cred -> Slug -> Internals -> ( Model, Cmd Msg )
-fave toRequest cred slug model =
-    ( Model model
-    , toRequest slug cred
-        |> Http.toTask
-        |> Task.attempt CompletedFavorite
-    )

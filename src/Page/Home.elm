@@ -1,4 +1,13 @@
-module Page.Home exposing (Model, Msg, init, subscriptions, toSession, update, view)
+module Page.Home
+    exposing
+        ( Model
+        , Msg
+        , init
+        , subscriptions
+        , toSession
+        , update
+        , view
+        )
 
 {-| The homepage. You can get here via either the / or /#/ routes.
 -}
@@ -85,7 +94,7 @@ init session =
 
 view : Model -> { title : String, content : Html Msg }
 view model =
-    { title = "TopMeals"
+    { title = "Home"
     , content =
         div [ class "home-page" ]
             [ viewBanner
@@ -100,40 +109,36 @@ view model =
                         --                         (Session.cred model.session)
                         --                         model.feedTab
                         --                   ]
-                        --                 , Feed.viewArticles model.timeZone feed
-                        --                     |> List.map (Html.map GotFeedMsg)
+                        --                , Feed.viewArticles model.timeZone feed
+                        --                   |> List.map (Html.map GotFeedMsg)
                         --                 , [ Feed.viewPagination ClickedFeedPage model.feedPage feed ]
                         --                 ]
                         --         ]
-                        --
-                        --     Loading ->
-                        --         []
-                        --
-                        --     LoadingSlowly ->
-                        --         [ Loading.icon ]
-                        --
-                        --     Failed ->
-                        --         [ Loading.error "feed" ]
-                        case model.meals of
-                            Loaded meals ->
+                        case ( model.meals, model.feed ) of
+                            ( Loaded meals, Loaded feed ) ->
                                 [ div [ class "feed-toggle" ] <|
                                     List.concat
                                         [ [ viewTabs
                                                 (Session.cred model.session)
                                                 model.feedTab
                                           ]
+                                        , Feed.viewArticles model.timeZone feed
+                                            |> List.map (Html.map GotFeedMsg)
                                         , Feed.viewMeals model.timeZone meals
                                             |> List.map (Html.map GotFeedMsg)
                                         ]
                                 ]
 
-                            Loading ->
+                            ( Loading, _ ) ->
                                 []
 
-                            LoadingSlowly ->
+                            ( LoadingSlowly, _ ) ->
                                 [ Loading.icon ]
 
-                            Failed ->
+                            ( Failed, _ ) ->
+                                [ Loading.error "feed" ]
+
+                            ( _, _ ) ->
                                 [ Loading.error "feed" ]
                     ]
                 ]
@@ -159,7 +164,7 @@ viewTabs : Maybe Cred -> FeedTab -> Html Msg
 viewTabs maybeCred tab =
     case tab of
         YourFeed cred ->
-            Feed.viewTabs [] (yourFeed cred) [ globalFeed, allUsers ]
+            Feed.viewTabs [] (yourFeed cred) [ allMeals, allUsers ]
 
         GlobalFeed ->
             let
@@ -171,7 +176,7 @@ viewTabs maybeCred tab =
                         Nothing ->
                             []
             in
-                Feed.viewTabs otherTabs globalFeed [ allUsers ]
+                Feed.viewTabs otherTabs allMeals [ allUsers ]
 
         AllUsers ->
             let
@@ -183,7 +188,7 @@ viewTabs maybeCred tab =
                         Nothing ->
                             []
                     )
-                        ++ [ globalFeed ]
+                        ++ [ allMeals ]
             in
                 Feed.viewTabs otherTabs allUsers []
 
@@ -193,9 +198,9 @@ yourFeed cred =
     ( "Your Meals", ClickedTab (YourFeed cred) )
 
 
-globalFeed : ( String, Msg )
-globalFeed =
-    ( "Global Feed", ClickedTab GlobalFeed )
+allMeals : ( String, Msg )
+allMeals =
+    ( "All Meals", ClickedTab GlobalFeed )
 
 
 allUsers : ( String, Msg )

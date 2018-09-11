@@ -1,4 +1,4 @@
-module Profile exposing (Profile, avatar, bio, decoder)
+module Profile exposing (Profile, avatar, bio, calories, decoder)
 
 {-| A user's profile - potentially your own!
 
@@ -10,9 +10,8 @@ import Api exposing (Cred)
 import Avatar exposing (Avatar)
 import Http
 import Json.Decode as Decode exposing (Decoder)
-import Json.Decode.Pipeline exposing (required)
+import Json.Decode.Pipeline exposing (required, hardcoded)
 import Username exposing (Username)
-
 
 
 -- TYPES
@@ -25,6 +24,7 @@ type Profile
 type alias Internals =
     { bio : Maybe String
     , avatar : Avatar
+    , calories : Int
     }
 
 
@@ -42,6 +42,11 @@ avatar (Profile info) =
     info.avatar
 
 
+calories : Profile -> Int
+calories (Profile info) =
+    info.calories
+
+
 
 -- SERIALIZATION
 
@@ -51,4 +56,7 @@ decoder =
     Decode.succeed Internals
         |> required "bio" (Decode.nullable Decode.string)
         |> required "image" Avatar.decoder
+        |> hardcoded 42
+        -- TODO: Add this when API is ready
+        -- |> required "calories" Decode.int
         |> Decode.map Profile
