@@ -146,7 +146,7 @@ viewBanner =
     div [ class "banner" ]
         [ div [ class "container" ]
             [ h1 [ class "logo-font" ] [ text "TopMeals" ]
-            , p [] [ text "A place to share your knowledge." ]
+            , p [] [ text "The best way to track your daily calorie intake." ]
             ]
         ]
 

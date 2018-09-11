@@ -118,7 +118,7 @@ view model =
                                         text ""
 
                                     LoadingSlowly ->
-                                        Loading.icon
+                                        div [ class "settings-spinner" ] [ Loading.icon ]
 
                                     Failed ->
                                         text "Error loading page."
