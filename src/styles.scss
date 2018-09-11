@@ -1,0 +1,30 @@
+a {
+	color: #6c91bf;
+}
+
+a:hover {
+	color: #4f6a8b;
+}
+
+.home-page .banner {
+	background: #6c91bf;
+}
+
+.navbar-brand {
+	color: #6c91bf !important;
+}
+
+.nav-pills.outline-active .nav-link.active {
+	color: #6c91bf !important;
+	border-bottom: 2px solid #6c91bf !important;
+}
+
+.btn-primary {
+	color: #fff;
+	background-color: #6c91bf;
+	border-color: #6c91bf;
+
+	&:hover {
+		background-color: #4f6a8b;
+	}
+}
