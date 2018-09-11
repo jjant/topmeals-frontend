@@ -3,7 +3,7 @@ module Page.Profile exposing (Model, Msg, init, subscriptions, toSession, update
 {-| An Author's profile.
 -}
 
-import Api exposing (Cred)
+import Api exposing (Cred, Role(..))
 import Api.Endpoint as Endpoint
 import Article exposing (Article, Preview)
 import Article.Feed as Feed
@@ -48,6 +48,38 @@ type Status a
     | Failed Username
 
 
+{-| A regular user is only allowed to see his profile.
+Admins and managers can see other users' profiles.
+Unlogged viewers can't see profiles.
+Those that are not authorized will be redirected to home screen.
+-}
+checkPermissions : Session -> Username -> Cmd Msg
+checkPermissions session profileUsername =
+    let
+        redirectToHome =
+            Route.replaceUrl (Session.navKey session) Route.Home
+    in
+        session
+            |> Session.cred
+            |> Maybe.map (\cred -> ( Api.username cred, Api.role cred ))
+            |> Maybe.map
+                (\( username, role ) ->
+                    case role of
+                        Regular ->
+                            if username == profileUsername then
+                                Cmd.none
+                            else
+                                redirectToHome
+
+                        Manager ->
+                            Cmd.none
+
+                        Admin ->
+                            Cmd.none
+                )
+            |> Maybe.withDefault redirectToHome
+
+
 init : Session -> Username -> ( Model, Cmd Msg )
 init session username =
     let
@@ -62,14 +94,16 @@ init session username =
           , feed = Loading username
           }
         , Cmd.batch
-            [ Author.fetch username maybeCred
+            ([ checkPermissions session username
+             , Author.fetch username maybeCred
                 |> Http.toTask
                 |> Task.mapError (Tuple.pair username)
                 |> Task.attempt CompletedAuthorLoad
-            , fetchFeed session username 1
-            , Task.perform GotTimeZone Time.here
-            , Task.perform (\_ -> PassedSlowLoadThreshold) Loading.slowThreshold
-            ]
+             , fetchFeed session username 1
+             , Task.perform GotTimeZone Time.here
+             , Task.perform (\_ -> PassedSlowLoadThreshold) Loading.slowThreshold
+             ]
+            )
         )
 
 
