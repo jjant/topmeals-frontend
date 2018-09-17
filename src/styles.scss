@@ -53,3 +53,21 @@ a:hover {
 	top: 50%;
 	transform: translateY(-50%);
 }
+
+.meals-group {
+	margin-top: 14px;
+}
+
+.over-calories {
+	border: 1px solid red;
+	border-radius: 3px;
+}
+
+.under-calories {
+	border: 1px solid green;
+	border-radius: 3px;
+}
+
+.article-preview {
+	padding-left: 12px;
+}

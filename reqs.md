@@ -1,24 +1,18 @@
+FILTRAR MEALS
+
+MOSTRAR USUARIOS Y PODER BORRARLOS
+
+DESBLOQUEAR USUARIOS
+
+UPLOADEAR PROFILE PHOTO
+
 # Frontend
-
-* User must be able to create an account and log in.
-
-* When logged in, a user can see:
-
-  * A list of his meal
-  * Should be able to add, edit and delete meals. (user enters calories manually, no auto calculations!)
 
 * Implement at least three roles with different permission levels:
 
   * Regular user is able to CRUD on their owned records
   * Manager is able CRUD users
   * Admin is able CRUD all records and users.
-
-* Each entry has
-
-  * date
-  * time
-  * text
-  * Num of calories.
 
 * Filter by dates from-to, time from-to (e.g. how much calories have I had for lunch each day in the last month if lunch is between 12 and 15h).
 

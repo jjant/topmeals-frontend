@@ -34,6 +34,8 @@ import Timestamp
 import Url exposing (Url)
 import Username exposing (Username)
 import Meal exposing (Meal)
+import List.Extra
+import Viewer
 
 
 {-| NOTE: This module has its own Model, view, and update. This is not normal!
@@ -95,7 +97,8 @@ viewMeals timeZone (Model { meals, session, errors }) =
 
         mealsHtml =
             PaginatedList.values meals
-                |> List.map (viewMeal maybeCred timeZone)
+                |> groupFeedByDay
+                |> List.map (viewMealsForDay session timeZone)
     in
         Page.viewErrors ClickedDismissErrors errors :: mealsHtml
 
@@ -110,51 +113,68 @@ viewTime time =
     (String.fromInt <| toHour utc time) ++ ":" ++ (String.fromInt <| toMinute utc time)
 
 
-viewMeal : Maybe Cred -> Time.Zone -> Meal -> Html Msg
-viewMeal maybeCred timeZone meal =
-    div [ class "article-preview" ]
-        [ a [ class "preview-link", Route.href (Route.Meal <| Meal.slug meal) ]
-            [ h1 [] [ text <| meal.text ]
-            , p [] [ text <| "Date: " ++ (viewDate meal.datetime) ]
-            , p [] [ text <| "Time: " ++ (viewTime meal.datetime) ]
-            , p [] [ text <| "Calories: " ++ (String.fromInt meal.calories) ++ " (cal)" ]
+type CalorieResult
+    = Over
+    | Under
+    | Unknown
+
+
+viewMealsForDay : Session -> Time.Zone -> List Meal -> Html Msg
+viewMealsForDay session timeZone mealsForDay =
+    let
+        caloriesInMeals =
+            mealsForDay
+                |> List.map (\a -> a.calories)
+                |> List.sum
+
+        calorieResult =
+            session
+                |> Session.viewer
+                |> Maybe.map Viewer.calories
+                |> Maybe.map
+                    (\cal ->
+                        if caloriesInMeals <= cal then
+                            Under
+                        else
+                            Over
+                    )
+                |> Maybe.withDefault Unknown
+    in
+        List.head mealsForDay
+            |> Maybe.map .datetime
+            |> Maybe.map (Timestamp.format timeZone)
+            |> Maybe.map
+                (\d ->
+                    div []
+                        [ h3 [ class "meals-group" ] [ text d ]
+                        , div [] ((List.map (viewMeal calorieResult timeZone)) mealsForDay)
+                        ]
+                )
+            |> Maybe.withDefault (text "")
+
+
+viewMeal : CalorieResult -> Time.Zone -> Meal -> Html Msg
+viewMeal cr timeZone meal =
+    let
+        crClass =
+            case cr of
+                Over ->
+                    "over-calories"
+
+                Under ->
+                    "under-calories"
+
+                Unknown ->
+                    ""
+    in
+        div [ class <| "article-preview " ++ crClass ]
+            [ a [ class "preview-link", Route.href (Route.Meal <| Meal.slug meal) ]
+                [ h1 [] [ text <| meal.text ]
+                , p [] [ text <| "Date: " ++ (viewDate meal.datetime) ]
+                , p [] [ text <| "Time: " ++ (viewTime meal.datetime) ]
+                , p [] [ text <| "Calories: " ++ (String.fromInt meal.calories) ++ " (cal)" ]
+                ]
             ]
-        ]
-
-
-
--- viewPreview : Maybe Cred -> Time.Zone -> Article Preview -> Html Msg
--- viewPreview maybeCred timeZone article =
---     let
---         slug =
---             Article.slug article
---
---         { title, description, createdAt } =
---             Article.metadata article
---
---         author =
---             Article.author article
---
---         profile =
---             Author.profile author
---
---         username =
---             Author.username author
---     in
---         div [ class "article-preview" ]
---             [ div [ class "article-meta" ]
---                 [ a [ Route.href (Route.Profile username) ]
---                     [ img [ Avatar.src (Profile.avatar profile) ] [] ]
---                 , div [ class "info" ]
---                     [ Author.view username
---                     , Timestamp.view timeZone createdAt
---                     ]
---                 ]
---             , a [ class "preview-link", Route.href (Route.Article (Article.slug article)) ]
---                 [ h1 [] [ text title ]
---                 , p [] [ text description ]
---                 ]
---             ]
 
 
 viewTabs :
@@ -254,3 +274,26 @@ pageCountDecoder : Int -> Decoder Int
 pageCountDecoder resultsPerPage =
     Decode.int
         |> Decode.map (\total -> ceiling (toFloat total / toFloat resultsPerPage))
+
+
+
+-- Sort by date and group
+
+
+groupFeedByDay : List Meal -> List (List Meal)
+groupFeedByDay mealList =
+    mealList
+        |> List.sortBy (\a -> negate <| Time.posixToMillis a.datetime)
+        |> List.Extra.groupWhile (\a b -> isSameDate (a.datetime) (b.datetime))
+        |> List.map (\( x, xs ) -> x :: xs)
+
+
+
+--
+
+
+isSameDate : Posix -> Posix -> Bool
+isSameDate p1 p2 =
+    (Time.toDay utc p1 == Time.toDay utc p2)
+        && (Time.toMonth utc p1 == Time.toMonth utc p2)
+        && (Time.toYear utc p1 == Time.toYear utc p2)

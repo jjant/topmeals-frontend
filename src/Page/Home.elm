@@ -111,19 +111,6 @@ view model =
             , div [ class "container page" ]
                 [ div [ class "row" ]
                     [ div [ class "col-md-9" ] <|
-                        -- case model.feed of
-                        --     Loaded feed ->
-                        --         [ div [ class "feed-toggle" ] <|
-                        --             List.concat
-                        --                 [ [ viewTabs
-                        --                         (Session.cred model.session)
-                        --                         model.feedTab
-                        --                   ]
-                        --                , Feed.viewArticles model.timeZone feed
-                        --                   |> List.map (Html.map GotFeedMsg)
-                        --                 , [ Feed.viewPagination ClickedFeedPage model.feedPage feed ]
-                        --                 ]
-                        --         ]
                         case model.feed of
                             -- TODO: Renderear user en all meal
                             Loaded feed ->
@@ -146,6 +133,12 @@ view model =
 
                             Failed ->
                                 [ Loading.error "feed" ]
+                    , div [ class "col-md-3" ] <|
+                        [ div [ class "sidebar" ] <|
+                            [ p [] [ text "Filter Meals" ]
+                            , div [] []
+                            ]
+                        ]
                     ]
                 ]
             ]
