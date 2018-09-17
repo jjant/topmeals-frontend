@@ -52,9 +52,25 @@ viewHeader page maybeViewer =
         [ div [ class "container" ]
             [ a [ class "navbar-brand", Route.href Route.Home ]
                 [ text "TopMeals" ]
+            , viewCred (Maybe.map Viewer.cred maybeViewer)
             , ul [ class "nav navbar-nav pull-xs-right" ] (viewMenu page maybeViewer)
             ]
         ]
+
+
+viewCred : Maybe Cred -> Html msg
+viewCred mcred =
+    case Maybe.map Api.role mcred of
+        Just Api.Manager ->
+            div [ class "cred-indicator-container" ]
+                [ p [ class "cred-indicator" ] [ text "Manager" ] ]
+
+        Just Api.Admin ->
+            div [ class "cred-indicator-container" ]
+                [ p [ class "cred-indicator" ] [ text "Admin" ] ]
+
+        _ ->
+            text ""
 
 
 viewMenu : Page -> Maybe Viewer -> List (Html msg)
@@ -63,30 +79,30 @@ viewMenu page maybeViewer =
         linkTo =
             navbarLink page
     in
-    case maybeViewer of
-        Just viewer ->
-            let
-                username =
-                    Viewer.username viewer
+        case maybeViewer of
+            Just viewer ->
+                let
+                    username =
+                        Viewer.username viewer
 
-                avatar =
-                    Viewer.avatar viewer
-            in
-              [navbarLink page Route.Home [ text "Home" ]
-              , linkTo Route.NewArticle [ i [ class "ion-compose" ] [], text "\u{00A0}New Meal" ]
-              , linkTo Route.Settings [ i [ class "ion-gear-a" ] [], text "\u{00A0}Settings" ]
-              , linkTo
-                  (Route.Profile username)
-                  [ img [ class "user-pic", Avatar.src avatar ] []
-                  , Username.toHtml username
-                  ]
-              , linkTo Route.Logout [ text "Sign out" ]
-              ]
+                    avatar =
+                        Viewer.avatar viewer
+                in
+                    [ navbarLink page Route.Home [ text "Home" ]
+                    , linkTo Route.NewArticle [ i [ class "ion-compose" ] [], text "New Meal" ]
+                    , linkTo Route.Settings [ i [ class "ion-gear-a" ] [], text "Settings" ]
+                    , linkTo
+                        (Route.Profile username)
+                        [ img [ class "user-pic", Avatar.src avatar ] []
+                        , Username.toHtml username
+                        ]
+                    , linkTo Route.Logout [ text "Sign out" ]
+                    ]
 
-        Nothing ->
-            [ linkTo Route.Login [ text "Sign in" ]
-            , linkTo Route.Register [ text "Sign up" ]
-            ]
+            Nothing ->
+                [ linkTo Route.Login [ text "Sign in" ]
+                , linkTo Route.Register [ text "Sign up" ]
+                ]
 
 
 viewFooter : Html msg
@@ -138,7 +154,6 @@ viewErrors : msg -> List String -> Html msg
 viewErrors dismissErrors errors =
     if List.isEmpty errors then
         Html.text ""
-
     else
         div
             [ class "error-messages"

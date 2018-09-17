@@ -34,3 +34,22 @@ a:hover {
 	align-items: center;
 	justify-content: center;
 }
+
+.cred-indicator-container {
+	display: inline-block;
+	position: absolute;
+	top: 0;
+	bottom: 0;
+}
+
+.cred-indicator {
+	padding: 4px 12px;
+	display: inline-block;
+	margin: 0;
+	border: 1px solid black;
+	border-radius: 3px;
+	font-size: 14px;
+	position: relative;
+	top: 50%;
+	transform: translateY(-50%);
+}

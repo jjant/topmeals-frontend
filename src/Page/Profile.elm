@@ -94,16 +94,15 @@ init session username =
           , feed = Loading username
           }
         , Cmd.batch
-            ([ checkPermissions session username
-             , Author.fetch username maybeCred
+            [ checkPermissions session username
+            , Author.fetch username maybeCred
                 |> Http.toTask
                 |> Task.mapError (Tuple.pair username)
                 |> Task.attempt CompletedAuthorLoad
-             , fetchFeed session username 1
-             , Task.perform GotTimeZone Time.here
-             , Task.perform (\_ -> PassedSlowLoadThreshold) Loading.slowThreshold
-             ]
-            )
+            , fetchFeed session username 1
+            , Task.perform GotTimeZone Time.here
+            , Task.perform (\_ -> PassedSlowLoadThreshold) Loading.slowThreshold
+            ]
         )
 
 
@@ -137,12 +136,14 @@ fetchFeed session username page =
             Url.Builder.string "author" (Username.toString username)
 
         params =
-            firstParam :: PaginatedList.params { page = page, resultsPerPage = articlesPerPage }
+            -- TODO: Handle this!! It's for viewing the profiles of other users
+            -- firstParam :: PaginatedList.params { page = page, resultsPerPage = articlesPerPage }
+            PaginatedList.params { page = page, resultsPerPage = articlesPerPage }
 
         expect =
             Feed.decoder maybeCred articlesPerPage
     in
-        Api.get (Endpoint.articles params) maybeCred expect
+        Api.get (Endpoint.mealsFeed params) maybeCred expect
             |> Http.toTask
             |> Task.map (Feed.init session)
             |> Task.mapError (Tuple.pair username)
