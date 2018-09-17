@@ -5,7 +5,7 @@ module Article.Feed
         , decoder
         , init
         , update
-        , viewArticles
+          -- , viewArticles
         , viewPagination
         , viewTabs
         , viewMeals
@@ -29,10 +29,11 @@ import Route exposing (Route)
 import Session exposing (Session)
 import Task exposing (Task)
 import Time exposing (..)
+import Util exposing (monthToString)
 import Timestamp
 import Url exposing (Url)
 import Username exposing (Username)
-import Meal
+import Meal exposing (Meal)
 
 
 {-| NOTE: This module has its own Model, view, and update. This is not normal!
@@ -67,17 +68,17 @@ a surprising state, we know exactly where to look: this module.
 type alias Internals =
     { session : Session
     , errors : List String
-    , articles : PaginatedList (Article Preview)
+    , meals : PaginatedList Meal
     , isLoading : Bool
     }
 
 
-init : Session -> PaginatedList (Article Preview) -> Model
-init session articles =
+init : Session -> PaginatedList Meal -> Model
+init session meals =
     Model
         { session = session
         , errors = []
-        , articles = articles
+        , meals = meals
         , isLoading = False
         }
 
@@ -86,63 +87,17 @@ init session articles =
 -- VIEW
 
 
-viewArticles : Time.Zone -> Model -> List (Html Msg)
-viewArticles timeZone (Model { articles, session, errors }) =
+viewMeals : Time.Zone -> Model -> List (Html Msg)
+viewMeals timeZone (Model { meals, session, errors }) =
     let
         maybeCred =
             Session.cred session
 
-        articlesHtml =
-            PaginatedList.values articles
-                |> List.map (viewPreview maybeCred timeZone)
+        mealsHtml =
+            PaginatedList.values meals
+                |> List.map (viewMeal maybeCred timeZone)
     in
-        Page.viewErrors ClickedDismissErrors errors :: articlesHtml
-
-
-viewMeals : Time.Zone -> List Meal.Meal -> List (Html msg)
-viewMeals timeZone meals =
-    -- TODO: See if I should handle TZ
-    List.map viewMeal meals
-
-
-monthToString : Month -> String
-monthToString month =
-    case month of
-        Jan ->
-            "Jan"
-
-        Feb ->
-            "Feb"
-
-        Mar ->
-            "Mar"
-
-        Apr ->
-            "Apr"
-
-        May ->
-            "May"
-
-        Jun ->
-            "Jun"
-
-        Jul ->
-            "Jul"
-
-        Aug ->
-            "Aug"
-
-        Sep ->
-            "Sep"
-
-        Oct ->
-            "Oct"
-
-        Nov ->
-            "Nov"
-
-        Dec ->
-            "Dec"
+        Page.viewErrors ClickedDismissErrors errors :: mealsHtml
 
 
 viewDate : Posix -> String
@@ -155,50 +110,51 @@ viewTime time =
     (String.fromInt <| toHour utc time) ++ ":" ++ (String.fromInt <| toMinute utc time)
 
 
-viewMeal : Meal.Meal -> Html msg
-viewMeal meal =
+viewMeal : Maybe Cred -> Time.Zone -> Meal -> Html Msg
+viewMeal maybeCred timeZone meal =
     div [ class "article-preview" ]
-        [ a [ class "preview-link", Route.href (Route.Article <| ArticleSlug.Slug meal.id) ]
+        [ a [ class "preview-link", Route.href (Route.Article <| Meal.slug meal) ]
             [ h1 [] [ text <| meal.text ]
-            , p [] [ text <| "Date: " ++ (viewDate meal.dateTime) ]
-            , p [] [ text <| "Time: " ++ (viewTime meal.dateTime) ]
+            , p [] [ text <| "Date: " ++ (viewDate meal.datetime) ]
+            , p [] [ text <| "Time: " ++ (viewTime meal.datetime) ]
             , p [] [ text <| "Calories: " ++ (String.fromInt meal.calories) ++ " (cal)" ]
             ]
         ]
 
 
-viewPreview : Maybe Cred -> Time.Zone -> Article Preview -> Html Msg
-viewPreview maybeCred timeZone article =
-    let
-        slug =
-            Article.slug article
 
-        { title, description, createdAt } =
-            Article.metadata article
-
-        author =
-            Article.author article
-
-        profile =
-            Author.profile author
-
-        username =
-            Author.username author
-    in
-        div [ class "article-preview" ]
-            [ div [ class "article-meta" ]
-                [ a [ Route.href (Route.Profile username) ]
-                    [ img [ Avatar.src (Profile.avatar profile) ] [] ]
-                , div [ class "info" ]
-                    [ Author.view username
-                    , Timestamp.view timeZone createdAt
-                    ]
-                ]
-            , a [ class "preview-link", Route.href (Route.Article (Article.slug article)) ]
-                [ h1 [] [ text title ]
-                , p [] [ text description ]
-                ]
-            ]
+-- viewPreview : Maybe Cred -> Time.Zone -> Article Preview -> Html Msg
+-- viewPreview maybeCred timeZone article =
+--     let
+--         slug =
+--             Article.slug article
+--
+--         { title, description, createdAt } =
+--             Article.metadata article
+--
+--         author =
+--             Article.author article
+--
+--         profile =
+--             Author.profile author
+--
+--         username =
+--             Author.username author
+--     in
+--         div [ class "article-preview" ]
+--             [ div [ class "article-meta" ]
+--                 [ a [ Route.href (Route.Profile username) ]
+--                     [ img [ Avatar.src (Profile.avatar profile) ] [] ]
+--                 , div [ class "info" ]
+--                     [ Author.view username
+--                     , Timestamp.view timeZone createdAt
+--                     ]
+--                 ]
+--             , a [ class "preview-link", Route.href (Route.Article (Article.slug article)) ]
+--                 [ h1 [] [ text title ]
+--                 , p [] [ text description ]
+--                 ]
+--             ]
 
 
 viewTabs :
@@ -231,7 +187,7 @@ viewPagination toMsg page (Model feed) =
             pageLink toMsg currentPage (currentPage == page)
 
         totalPages =
-            PaginatedList.total feed.articles
+            PaginatedList.total feed.meals
     in
         if totalPages > 1 then
             List.range 1 totalPages
@@ -287,11 +243,11 @@ replaceArticle newArticle oldArticle =
 -- SERIALIZATION
 
 
-decoder : Maybe Cred -> Int -> Decoder (PaginatedList (Article Preview))
+decoder : Maybe Cred -> Int -> Decoder (PaginatedList Meal)
 decoder maybeCred resultsPerPage =
     Decode.succeed PaginatedList.fromList
-        |> required "articlesCount" (pageCountDecoder resultsPerPage)
-        |> required "articles" (Decode.list (Article.previewDecoder maybeCred))
+        |> required "mealsCount" (pageCountDecoder resultsPerPage)
+        |> required "meals" (Decode.list (Meal.fullDecoder maybeCred))
 
 
 pageCountDecoder : Int -> Decoder Int

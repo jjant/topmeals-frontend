@@ -31,7 +31,7 @@ import Time
 import Url.Builder
 import Username exposing (Username)
 import Route
-import Meal exposing (Meal, meals)
+import Meal exposing (Meal)
 
 
 -- MODEL
@@ -45,7 +45,6 @@ type alias Model =
 
     -- Loaded independently from server
     , feed : Status Feed.Model
-    , meals : Status (List Meal)
     }
 
 
@@ -88,7 +87,8 @@ init session =
           , feedTab = feedTab
           , feedPage = 1
           , feed = Loading
-          , meals = Loaded meals
+
+          -- , meals = Loaded meals
           }
         , Cmd.batch
             [ checkLoggedIn session
@@ -126,31 +126,26 @@ view model =
                         --                 , [ Feed.viewPagination ClickedFeedPage model.feedPage feed ]
                         --                 ]
                         --         ]
-                        case ( model.meals, model.feed ) of
-                            ( Loaded meals, Loaded feed ) ->
+                        case model.feed of
+                            Loaded feed ->
                                 [ div [ class "feed-toggle" ] <|
                                     List.concat
                                         [ [ viewTabs
                                                 (Session.cred model.session)
                                                 model.feedTab
                                           ]
-                                        , Feed.viewArticles model.timeZone feed
-                                            |> List.map (Html.map GotFeedMsg)
-                                        , Feed.viewMeals model.timeZone meals
+                                        , Feed.viewMeals model.timeZone feed
                                             |> List.map (Html.map GotFeedMsg)
                                         ]
                                 ]
 
-                            ( Loading, _ ) ->
+                            Loading ->
                                 []
 
-                            ( LoadingSlowly, _ ) ->
+                            LoadingSlowly ->
                                 [ Loading.icon ]
 
-                            ( Failed, _ ) ->
-                                [ Loading.error "feed" ]
-
-                            ( _, _ ) ->
+                            Failed ->
                                 [ Loading.error "feed" ]
                     ]
                 ]
@@ -316,7 +311,7 @@ fetchFeed session feedTabs page =
         request =
             case feedTabs of
                 YourFeed cred ->
-                    Api.get (Endpoint.feed params) maybeCred decoder
+                    Api.get (Endpoint.mealsFeed params) maybeCred decoder
 
                 GlobalFeed ->
                     Api.get (Endpoint.articles params) maybeCred decoder

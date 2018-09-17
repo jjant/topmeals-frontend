@@ -11,6 +11,9 @@ module Api.Endpoint
         , tags
         , user
         , users
+        , meal
+        , meals
+        , mealsFeed
         )
 
 import Article.Slug as Slug exposing (Slug)
@@ -65,7 +68,8 @@ url : List String -> List QueryParameter -> Endpoint
 url paths queryParams =
     -- NOTE: Url.Builder takes care of percent-encoding special URL characters.
     -- See https://package.elm-lang.org/packages/elm/url/latest/Url#percentEncode
-    Url.Builder.crossOrigin "https://conduit.productionready.io"
+    Url.Builder.crossOrigin "https://topcalories-upuvlunrwl.now.sh"
+        -- Url.Builder.crossOrigin "https://conduit.productionready.io"
         ("api" :: paths)
         queryParams
         |> Endpoint
@@ -122,3 +126,22 @@ feed params =
 tags : Endpoint
 tags =
     url [ "tags" ] []
+
+
+
+---- MEALS
+
+
+meal : Slug -> Endpoint
+meal slug =
+    url [ "meals", Slug.toString slug ] []
+
+
+meals : List QueryParameter -> Endpoint
+meals params =
+    url [ "meals" ] params
+
+
+mealsFeed : List QueryParameter -> Endpoint
+mealsFeed params =
+    url [ "meals", "feed" ] params

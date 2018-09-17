@@ -214,8 +214,9 @@ view model =
                                                 [ div [ class "articles-toggle" ] <|
                                                     List.concat
                                                         [ [ viewTabs ]
-                                                        , Feed.viewArticles model.timeZone feed
-                                                            |> List.map (Html.map GotFeedMsg)
+
+                                                        -- , Feed.viewArticles model.timeZone feed
+                                                        --     |> List.map (Html.map GotFeedMsg)
                                                         , [ Feed.viewPagination ClickedFeedPage model.feedPage feed ]
                                                         ]
                                                 ]

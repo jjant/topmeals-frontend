@@ -18,7 +18,8 @@ import Profile exposing (Profile)
 import Route
 import Session exposing (Session)
 import Task exposing (Task)
-import Time
+import Time exposing (Posix)
+import Meal exposing (Meal)
 
 
 -- MODEL
@@ -32,13 +33,13 @@ type alias Model =
 
 type
     Status
-    -- Edit Article
+    -- Edit meal
     = Loading Slug
     | LoadingSlowly Slug
     | LoadingFailed Slug
     | Saving Slug Form
     | Editing Slug (List Problem) Form
-      -- New Article
+      -- New meal
     | EditingNew (List Problem) Form
     | Creating Form
 
@@ -49,10 +50,10 @@ type Problem
 
 
 type alias Form =
-    { title : String
-    , body : String
-    , description : String
-    , tags : String
+    -- TODO: Use proper types
+    { text : String
+    , calories : String
+    , datetime : String
     }
 
 
@@ -61,10 +62,9 @@ initNew session =
     ( { session = session
       , status =
             EditingNew []
-                { title = ""
-                , body = ""
-                , description = ""
-                , tags = ""
+                { text = ""
+                , calories = ""
+                , datetime = ""
                 }
       }
     , Cmd.none
@@ -77,7 +77,7 @@ initEdit session slug =
       , status = Loading slug
       }
     , Cmd.batch
-        [ Article.fetch (Session.cred session) slug
+        [ Meal.fetch (Session.cred session) slug
             |> Http.toTask
             -- If init fails, store the slug that failed in the msg, so we can
             -- at least have it later to display the page's title properly!
@@ -179,8 +179,8 @@ viewForm cred fields saveButton =
                 [ input
                     [ class "form-control form-control-lg"
                     , placeholder "Meal name"
-                    , onInput EnteredTitle
-                    , value fields.title
+                    , onInput EnteredText
+                    , value fields.text
                     ]
                     []
                 ]
@@ -188,8 +188,8 @@ viewForm cred fields saveButton =
                 [ input
                     [ class "form-control"
                     , placeholder "How many calories did this meal contain?"
-                    , onInput EnteredDescription
-                    , value fields.description
+                    , onInput EnteredCalories
+                    , value fields.calories
                     ]
                     []
                 ]
@@ -197,8 +197,8 @@ viewForm cred fields saveButton =
                 [ input
                     [ class "form-control"
                     , placeholder "When did you have this meal?"
-                    , onInput EnteredBody
-                    , value fields.body
+                    , onInput EnteredDatetime
+                    , value fields.datetime
                     ]
                     []
                 ]
@@ -229,13 +229,12 @@ saveArticleButton caption extraAttrs =
 
 type Msg
     = ClickedSave Cred
-    | EnteredBody String
-    | EnteredDescription String
-    | EnteredTags String
-    | EnteredTitle String
-    | CompletedCreate (Result Http.Error (Article Full))
-    | CompletedEdit (Result Http.Error (Article Full))
-    | CompletedArticleLoad (Result ( Slug, Http.Error ) (Article Full))
+    | EnteredDatetime String
+    | EnteredCalories String
+    | EnteredText String
+    | CompletedCreate (Result Http.Error Meal)
+    | CompletedEdit (Result Http.Error Meal)
+    | CompletedArticleLoad (Result ( Slug, Http.Error ) Meal)
     | GotSession Session
     | PassedSlowLoadThreshold
 
@@ -248,21 +247,18 @@ update msg model =
                 |> save cred
                 |> Tuple.mapFirst (\status -> { model | status = status })
 
-        EnteredTitle title ->
-            updateForm (\form -> { form | title = title }) model
+        EnteredText text ->
+            updateForm (\form -> { form | text = text }) model
 
-        EnteredDescription description ->
-            updateForm (\form -> { form | description = description }) model
+        EnteredCalories calories ->
+            updateForm (\form -> { form | calories = calories }) model
 
-        EnteredTags tags ->
-            updateForm (\form -> { form | tags = tags }) model
+        EnteredDatetime datetime ->
+            updateForm (\form -> { form | datetime = datetime }) model
 
-        EnteredBody body ->
-            updateForm (\form -> { form | body = body }) model
-
-        CompletedCreate (Ok article) ->
+        CompletedCreate (Ok meal) ->
             ( model
-            , Route.Article (Article.slug article)
+            , Route.Article (Meal.slug meal)
                 |> Route.replaceUrl (Session.navKey model.session)
             )
 
@@ -271,9 +267,9 @@ update msg model =
             , Cmd.none
             )
 
-        CompletedEdit (Ok article) ->
+        CompletedEdit (Ok meal) ->
             ( model
-            , Route.Article (Article.slug article)
+            , Route.Article (Meal.slug meal)
                 |> Route.replaceUrl (Session.navKey model.session)
             )
 
@@ -287,18 +283,18 @@ update msg model =
             , Cmd.none
             )
 
-        CompletedArticleLoad (Ok article) ->
+        CompletedArticleLoad (Ok meal) ->
             let
-                { title, description, tags } =
-                    Article.metadata article
+                { text, calories, datetime } =
+                    meal
 
                 status =
-                    Editing (Article.slug article)
+                    Editing (Meal.slug meal)
                         []
-                        { title = title
-                        , body = Article.Body.toMarkdownString (Article.body article)
-                        , description = description
-                        , tags = String.join " " tags
+                        -- TODO: Format those fields appropiately
+                        { text = text
+                        , calories = "" -- calories
+                        , datetime = "" --datetime
                         }
             in
                 ( { model | status = status }
@@ -368,7 +364,7 @@ savingError : Http.Error -> Status -> Status
 savingError error status =
     let
         problems =
-            [ ServerError "Error saving article" ]
+            [ ServerError "Error creating meal" ]
     in
         case status of
             Saving slug form ->
@@ -474,14 +470,14 @@ validateField (Trimmed form) field =
     List.map (InvalidEntry field) <|
         case field of
             Title ->
-                if String.isEmpty form.title then
-                    [ "title can't be blank." ]
+                if String.isEmpty form.text then
+                    [ "Meal name can't be blank." ]
                 else
                     []
 
             Body ->
-                if String.isEmpty form.body then
-                    [ "body can't be blank." ]
+                if String.isEmpty form.calories then
+                    [ "Calories can't be blank." ]
                 else
                     []
 
@@ -492,10 +488,9 @@ Instead, trim only on submit.
 trimFields : Form -> TrimmedForm
 trimFields form =
     Trimmed
-        { title = String.trim form.title
-        , body = String.trim form.body
-        , description = String.trim form.description
-        , tags = String.trim form.tags
+        { text = String.trim form.text
+        , calories = String.trim form.calories
+        , datetime = String.trim form.datetime
         }
 
 
@@ -503,48 +498,46 @@ trimFields form =
 -- HTTP
 
 
-create : TrimmedForm -> Cred -> Http.Request (Article Full)
+create : TrimmedForm -> Cred -> Http.Request Meal
 create (Trimmed form) cred =
     let
-        article =
+        meal =
             Encode.object
-                [ ( "title", Encode.string form.title )
-                , ( "description", Encode.string form.description )
-                , ( "body", Encode.string form.body )
-                , ( "tagList", Encode.list Encode.string (tagsFromString form.tags) )
+                [ ( "text", Encode.string form.text )
+
+                -- TODO: Send correct types
+                -- , ( "calories", Encode.string form.calories )
+                -- , ( "datetime", Encode.string form.datetime )
+                , ( "datetime", Encode.string "2018-09-17T14:53:16+00:00" )
+                , ( "calories", Encode.int 22 )
                 ]
 
         body =
-            Encode.object [ ( "article", article ) ]
+            Encode.object [ ( "meal", meal ) ]
                 |> Http.jsonBody
     in
-        Decode.field "article" (Article.fullDecoder (Just cred))
-            |> Api.post (Endpoint.articles []) (Just cred) body
+        Decode.field "meal" (Meal.fullDecoder (Just cred))
+            |> Api.post (Endpoint.meals []) (Just cred) body
 
 
-tagsFromString : String -> List String
-tagsFromString str =
-    String.split " " str
-        |> List.map String.trim
-        |> List.filter (not << String.isEmpty)
-
-
-edit : Slug -> TrimmedForm -> Cred -> Http.Request (Article Full)
-edit articleSlug (Trimmed form) cred =
+edit : Slug -> TrimmedForm -> Cred -> Http.Request Meal
+edit slug (Trimmed form) cred =
     let
-        article =
+        meal =
             Encode.object
-                [ ( "title", Encode.string form.title )
-                , ( "description", Encode.string form.description )
-                , ( "body", Encode.string form.body )
+                [ ( "text", Encode.string form.text )
+
+                -- Send correct types
+                , ( "calories", Encode.string form.calories )
+                , ( "datetime", Encode.string form.datetime )
                 ]
 
         body =
-            Encode.object [ ( "article", article ) ]
+            Encode.object [ ( "meal", meal ) ]
                 |> Http.jsonBody
     in
-        Decode.field "article" (Article.fullDecoder (Just cred))
-            |> Api.put (Endpoint.article articleSlug) cred body
+        Decode.field "meal" (Meal.fullDecoder (Just cred))
+            |> Api.put (Endpoint.meal slug) cred body
 
 
 
