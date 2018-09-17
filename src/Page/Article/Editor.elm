@@ -258,7 +258,7 @@ update msg model =
 
         CompletedCreate (Ok meal) ->
             ( model
-            , Route.Article (Meal.slug meal)
+            , Route.Meal (Meal.slug meal)
                 |> Route.replaceUrl (Session.navKey model.session)
             )
 
@@ -269,7 +269,7 @@ update msg model =
 
         CompletedEdit (Ok meal) ->
             ( model
-            , Route.Article (Meal.slug meal)
+            , Route.Meal (Meal.slug meal)
                 |> Route.replaceUrl (Session.navKey model.session)
             )
 
@@ -509,7 +509,7 @@ create (Trimmed form) cred =
                 -- , ( "calories", Encode.string form.calories )
                 -- , ( "datetime", Encode.string form.datetime )
                 , ( "datetime", Encode.string "2018-09-17T14:53:16+00:00" )
-                , ( "calories", Encode.int 22 )
+                , ( "calories", Encode.int 42 )
                 ]
 
         body =

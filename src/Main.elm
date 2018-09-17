@@ -197,7 +197,7 @@ changeRouteTo maybeRoute model =
                 Profile.init session username
                     |> updateWith (Profile username) GotProfileMsg model
 
-            Just (Route.Article slug) ->
+            Just (Route.Meal slug) ->
                 Article.init session slug
                     |> updateWith Article GotArticleMsg model
 

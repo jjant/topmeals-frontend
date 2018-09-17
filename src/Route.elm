@@ -20,7 +20,7 @@ type Route
     | Logout
     | Register
     | Settings
-    | Article Slug
+    | Meal Slug
     | Profile Username
     | NewArticle
     | EditArticle Slug
@@ -36,7 +36,7 @@ parser =
         , Parser.map Settings (s "settings")
         , Parser.map Profile (s "profile" </> Username.urlParser)
         , Parser.map Register (s "register")
-        , Parser.map Article (s "article" </> Slug.urlParser)
+        , Parser.map Meal (s "meal" </> Slug.urlParser)
         , Parser.map NewArticle (s "editor")
         , Parser.map EditArticle (s "editor" </> Slug.urlParser)
         ]
@@ -92,8 +92,8 @@ routeToString page =
                 Settings ->
                     [ "settings" ]
 
-                Article slug ->
-                    [ "article", Slug.toString slug ]
+                Meal slug ->
+                    [ "meal", Slug.toString slug ]
 
                 Profile username ->
                     [ "profile", Username.toString username ]

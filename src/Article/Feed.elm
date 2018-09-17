@@ -113,7 +113,7 @@ viewTime time =
 viewMeal : Maybe Cred -> Time.Zone -> Meal -> Html Msg
 viewMeal maybeCred timeZone meal =
     div [ class "article-preview" ]
-        [ a [ class "preview-link", Route.href (Route.Article <| Meal.slug meal) ]
+        [ a [ class "preview-link", Route.href (Route.Meal <| Meal.slug meal) ]
             [ h1 [] [ text <| meal.text ]
             , p [] [ text <| "Date: " ++ (viewDate meal.datetime) ]
             , p [] [ text <| "Time: " ++ (viewTime meal.datetime) ]

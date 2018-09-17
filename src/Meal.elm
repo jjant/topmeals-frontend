@@ -3,6 +3,7 @@ module Meal
         ( Meal
         , fullDecoder
         , slug
+        , author
         , fetch
         )
 
@@ -66,6 +67,11 @@ fullDecoder maybeCred =
 slug : Meal -> Slug
 slug meal =
     meal.slug
+
+
+author : Meal -> Author
+author meal =
+    meal.author
 
 
 

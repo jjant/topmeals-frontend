@@ -5,8 +5,6 @@ module Page.Article exposing (Model, Msg, init, subscriptions, toSession, update
 
 import Api exposing (Cred, Role(..))
 import Api.Endpoint as Endpoint
-import Article exposing (Article, Full, Preview)
-import Article.Body exposing (Body)
 import Article.Slug as Slug exposing (Slug)
 import Author exposing (Author(..), FollowedAuthor, UnfollowedAuthor)
 import Avatar
@@ -27,6 +25,7 @@ import Time
 import Timestamp
 import Username exposing (Username)
 import Viewer exposing (Viewer)
+import Meal exposing (Meal)
 
 
 -- MODEL
@@ -38,7 +37,7 @@ type alias Model =
     , errors : List String
 
     -- Loaded independently from server
-    , article : Status (Article Full)
+    , meal : Status Meal
     }
 
 
@@ -91,11 +90,11 @@ init session slug =
         ( { session = session
           , timeZone = Time.utc
           , errors = []
-          , article = Loading
+          , meal = Loading
           }
         , Cmd.batch
-            [ Article.fetch maybeCred slug
-                |> Http.send CompletedLoadArticle
+            [ Meal.fetch maybeCred slug
+                |> Http.send CompletedLoadMeal
             , Task.perform GotTimeZone Time.here
             , Task.perform (\_ -> PassedSlowLoadThreshold) Loading.slowThreshold
             ]
@@ -108,20 +107,17 @@ init session slug =
 
 view : Model -> { title : String, content : Html Msg }
 view model =
-    case model.article of
-        Loaded article ->
+    case model.meal of
+        Loaded meal ->
             let
-                { title } =
-                    Article.metadata article
-
                 author =
-                    Article.author article
+                    Meal.author meal
 
                 avatar =
                     Profile.avatar (Author.profile author)
 
                 slug =
-                    Article.slug article
+                    Meal.slug meal
 
                 profile =
                     Author.profile author
@@ -129,24 +125,24 @@ view model =
                 buttons =
                     case Session.cred model.session of
                         Just cred ->
-                            viewButtons cred article author
+                            viewButtons cred meal author
 
                         Nothing ->
                             []
             in
-                { title = title
+                { title = meal.text
                 , content =
                     div [ class "article-page" ]
                         [ div [ class "banner" ]
                             [ div [ class "container" ]
-                                [ h1 [] [ text title ]
+                                [ h1 [] [ text meal.text ]
                                 , div [ class "article-meta" ] <|
                                     List.append
                                         [ a [ Route.href (Route.Profile (Author.username author)) ]
                                             [ img [ Avatar.src (Profile.avatar profile) ] [] ]
                                         , div [ class "info" ]
                                             [ Author.view (Author.username author)
-                                            , Timestamp.view model.timeZone (Article.metadata article).createdAt
+                                            , Timestamp.view model.timeZone meal.datetime
                                             ]
                                         ]
                                         buttons
@@ -156,7 +152,7 @@ view model =
                         , div [ class "container page" ]
                             [ div [ class "row article-content" ]
                                 [ div [ class "col-md-12" ]
-                                    [ Article.Body.toHtml (Article.body article) [] ]
+                                    [ p [] [ text <| "Calories: " ++ (String.fromInt meal.calories) ++ " (cal)" ] ]
                                 ]
                             , hr [] []
                             ]
@@ -164,13 +160,13 @@ view model =
                 }
 
         Loading ->
-            { title = "Article", content = text "" }
+            { title = "Meal", content = text "" }
 
         LoadingSlowly ->
-            { title = "Article", content = Loading.centeredIcon }
+            { title = "Meal", content = Loading.centeredIcon }
 
         Failed ->
-            { title = "Article", content = Loading.error "article" }
+            { title = "Meal", content = Loading.error "meal" }
 
 
 isSameUser : Cred -> Author -> Bool
@@ -178,8 +174,8 @@ isSameUser cred author =
     Api.username cred == Author.username author
 
 
-viewButtons : Cred -> Article Full -> Author -> List (Html Msg)
-viewButtons cred article author =
+viewButtons : Cred -> Meal -> Author -> List (Html Msg)
+viewButtons cred meal author =
     let
         defaultButtons =
             [ text ""
@@ -189,9 +185,9 @@ viewButtons cred article author =
     in
         case Api.role cred of
             Admin ->
-                [ editButton article
+                [ editButton meal
                 , text " "
-                , deleteButton cred article
+                , deleteButton cred meal
                 ]
 
             Manager ->
@@ -199,9 +195,9 @@ viewButtons cred article author =
 
             Regular ->
                 if isSameUser cred author then
-                    [ editButton article
+                    [ editButton meal
                     , text " "
-                    , deleteButton cred article
+                    , deleteButton cred meal
                     ]
                 else
                     defaultButtons
@@ -212,13 +208,10 @@ viewButtons cred article author =
 
 
 type Msg
-    = ClickedDeleteArticle Cred Slug
+    = ClickedDeleteMeal Cred Slug
     | ClickedDismissErrors
-    | ClickedFollow Cred UnfollowedAuthor
-    | ClickedUnfollow Cred FollowedAuthor
-    | CompletedLoadArticle (Result Http.Error (Article Full))
-    | CompletedDeleteArticle (Result Http.Error ())
-    | CompletedFollowChange (Result Http.Error Author)
+    | CompletedLoadMeal (Result Http.Error Meal)
+    | CompletedDeleteMeal (Result Http.Error ())
     | GotTimeZone Time.Zone
     | GotSession Session
     | PassedSlowLoadThreshold
@@ -230,49 +223,24 @@ update msg model =
         ClickedDismissErrors ->
             ( { model | errors = [] }, Cmd.none )
 
-        CompletedLoadArticle (Ok article) ->
-            ( { model | article = Loaded article }, Cmd.none )
+        CompletedLoadMeal (Ok meal) ->
+            ( { model | meal = Loaded meal }, Cmd.none )
 
-        CompletedLoadArticle (Err error) ->
-            ( { model | article = Failed }
+        CompletedLoadMeal (Err error) ->
+            ( { model | meal = Failed }
             , Log.error
             )
 
-        ClickedUnfollow cred followedAuthor ->
-            ( model
-            , Author.requestUnfollow followedAuthor cred
-                |> Http.send CompletedFollowChange
-            )
-
-        ClickedFollow cred unfollowedAuthor ->
-            ( model
-            , Author.requestFollow unfollowedAuthor cred
-                |> Http.send CompletedFollowChange
-            )
-
-        CompletedFollowChange (Ok newAuthor) ->
-            case model.article of
-                Loaded article ->
-                    ( { model | article = Loaded (Article.mapAuthor (\_ -> newAuthor) article) }, Cmd.none )
-
-                _ ->
-                    ( model, Log.error )
-
-        CompletedFollowChange (Err error) ->
-            ( { model | errors = Api.addServerError model.errors }
-            , Log.error
-            )
-
-        ClickedDeleteArticle cred slug ->
+        ClickedDeleteMeal cred slug ->
             ( model
             , delete slug cred
-                |> Http.send CompletedDeleteArticle
+                |> Http.send CompletedDeleteMeal
             )
 
-        CompletedDeleteArticle (Ok ()) ->
+        CompletedDeleteMeal (Ok ()) ->
             ( model, Route.replaceUrl (Session.navKey model.session) Route.Home )
 
-        CompletedDeleteArticle (Err error) ->
+        CompletedDeleteMeal (Err error) ->
             ( { model | errors = Api.addServerError model.errors }
             , Log.error
             )
@@ -289,15 +257,15 @@ update msg model =
             let
                 -- If any data is still Loading, change it to LoadingSlowly
                 -- so `view` knows to render a spinner.
-                article =
-                    case model.article of
+                meal =
+                    case model.meal of
                         Loading ->
                             LoadingSlowly
 
                         other ->
                             other
             in
-                ( { model | article = article }, Cmd.none )
+                ( { model | meal = meal }, Cmd.none )
 
 
 
@@ -315,7 +283,7 @@ subscriptions model =
 
 delete : Slug -> Cred -> Http.Request ()
 delete slug cred =
-    Api.delete (Endpoint.article slug) cred Http.emptyBody (Decode.succeed ())
+    Api.delete (Endpoint.meal slug) cred Http.emptyBody (Decode.succeed ())
 
 
 
@@ -331,17 +299,20 @@ toSession model =
 -- INTERNAL
 
 
-deleteButton : Cred -> Article a -> Html Msg
-deleteButton cred article =
+deleteButton : Cred -> Meal -> Html Msg
+deleteButton cred meal =
     let
         msg =
-            ClickedDeleteArticle cred (Article.slug article)
+            ClickedDeleteMeal cred (Meal.slug meal)
     in
         button [ class "btn btn-outline-danger btn-sm", onClick msg ]
             [ i [ class "ion-trash-a" ] [], text " Delete Meal" ]
 
 
-editButton : Article a -> Html Msg
-editButton article =
-    a [ class "btn btn-outline-secondary btn-sm", Route.href (Route.EditArticle (Article.slug article)) ]
+editButton : Meal -> Html Msg
+editButton meal =
+    a
+        [ class "btn btn-outline-secondary btn-sm"
+        , Route.href (Route.EditArticle (Meal.slug meal))
+        ]
         [ i [ class "ion-edit" ] [], text " Edit Meal" ]
