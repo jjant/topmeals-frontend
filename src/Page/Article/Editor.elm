@@ -80,7 +80,7 @@ initEdit session slug =
             -- If init fails, store the slug that failed in the msg, so we can
             -- at least have it later to display the page's title properly!
             |> Task.mapError (\httpError -> ( slug, httpError ))
-            |> Task.attempt CompletedArticleLoad
+            |> Task.attempt CompletedMealLoad
         , Task.perform (\_ -> PassedSlowLoadThreshold) Loading.slowThreshold
         ]
     )
@@ -148,7 +148,7 @@ viewAuthenticated cred model =
                     ]
 
                 LoadingFailed _ ->
-                    [ text "Article failed to load." ]
+                    [ text "Meal failed to load." ]
     in
         div [ class "editor-page" ]
             [ div [ class "container page" ]
@@ -234,7 +234,7 @@ type Msg
     | EnteredDate String
     | CompletedCreate (Result Http.Error Meal)
     | CompletedEdit (Result Http.Error Meal)
-    | CompletedArticleLoad (Result ( Slug, Http.Error ) Meal)
+    | CompletedMealLoad (Result ( Slug, Http.Error ) Meal)
     | GotSession Session
     | PassedSlowLoadThreshold
 
@@ -281,12 +281,12 @@ update msg model =
             , Cmd.none
             )
 
-        CompletedArticleLoad (Err ( slug, error )) ->
+        CompletedMealLoad (Err ( slug, error )) ->
             ( { model | status = LoadingFailed slug }
             , Cmd.none
             )
 
-        CompletedArticleLoad (Ok meal) ->
+        CompletedMealLoad (Ok meal) ->
             let
                 { text, calories, datetime } =
                     meal
@@ -367,7 +367,7 @@ savingError : Http.Error -> Status -> Status
 savingError error status =
     let
         problems =
-            [ "Error creating meal" ]
+            [ "Error creating meal, you must provide calories!" ]
     in
         case status of
             Saving slug form ->
@@ -466,17 +466,21 @@ validate form =
 
 
 type alias ValidForm =
-    { text : String, calories : Int, datetime : Posix }
+    { text : String, calories : String, datetime : Posix }
 
 
 validateFields : TrimmedForm -> Result (List String) ValidForm
 validateFields (Trimmed form) =
     let
-        rCalories : Result (List String) Int
+        rCalories : Result (List String) String
         rCalories =
-            form.calories
-                |> String.toInt
-                |> Result.fromMaybe [ "Calories can't be blank and must be a number." ]
+            if String.isEmpty form.calories then
+                Ok ""
+            else
+                form.calories
+                    |> String.toInt
+                    |> Result.fromMaybe [ "Calories must be a number." ]
+                    |> Result.map String.fromInt
 
         rText : Result (List String) String
         rText =
@@ -534,12 +538,19 @@ trimFields { text, calories, date, time } =
 create : ValidForm -> Cred -> Http.Request Meal
 create validForm cred =
     let
+        encodedCalories =
+            validForm.calories
+                |> String.toInt
+                |> Maybe.map (\i -> [ ( "calories", Encode.int i ) ])
+                |> Maybe.withDefault []
+
         meal =
             Encode.object
-                [ ( "text", Encode.string validForm.text )
-                , ( "calories", Encode.int validForm.calories )
-                , ( "datetime", Encode.string (Iso8601.fromTime validForm.datetime) )
-                ]
+                ([ ( "text", Encode.string validForm.text )
+                 , ( "datetime", Encode.string (Iso8601.fromTime validForm.datetime) )
+                 ]
+                    ++ encodedCalories
+                )
 
         body =
             Encode.object [ ( "meal", meal ) ]
@@ -552,12 +563,19 @@ create validForm cred =
 edit : Slug -> ValidForm -> Cred -> Http.Request Meal
 edit slug validForm cred =
     let
+        encodedCalories =
+            validForm.calories
+                |> String.toInt
+                |> Maybe.map (\i -> [ ( "calories", Encode.int i ) ])
+                |> Maybe.withDefault []
+
         meal =
             Encode.object
-                [ ( "text", Encode.string validForm.text )
-                , ( "calories", Encode.int validForm.calories )
-                , ( "datetime", Encode.string (Iso8601.fromTime validForm.datetime) )
-                ]
+                ([ ( "text", Encode.string validForm.text )
+                 , ( "datetime", Encode.string (Iso8601.fromTime validForm.datetime) )
+                 ]
+                    ++ encodedCalories
+                )
 
         body =
             Encode.object [ ( "meal", meal ) ]
