@@ -56,7 +56,5 @@ decoder =
     Decode.succeed Internals
         |> required "bio" (Decode.nullable Decode.string)
         |> required "image" Avatar.decoder
-        |> hardcoded 42
-        -- TODO: Add this when API is ready
-        -- |> required "calories" Decode.int
+        |> required "expectedCalories" Decode.int
         |> Decode.map Profile

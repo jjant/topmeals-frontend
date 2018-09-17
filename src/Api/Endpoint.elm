@@ -68,7 +68,7 @@ url : List String -> List QueryParameter -> Endpoint
 url paths queryParams =
     -- NOTE: Url.Builder takes care of percent-encoding special URL characters.
     -- See https://package.elm-lang.org/packages/elm/url/latest/Url#percentEncode
-    Url.Builder.crossOrigin "https://topcalories-qstukveujj.now.sh"
+    Url.Builder.crossOrigin "https://topmeals-backend.now.sh"
         -- Url.Builder.crossOrigin "https://topcalories-upuvlunrwl.now.sh"
         ("api" :: paths)
         queryParams

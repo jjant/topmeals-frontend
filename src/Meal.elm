@@ -15,6 +15,7 @@ import Json.Decode.Pipeline exposing (required, hardcoded)
 import Article.Slug as Slug exposing (Slug)
 import Author exposing (Author)
 import Http
+import Iso8601
 
 
 type alias Meal =
@@ -52,11 +53,8 @@ fullDecoder maybeCred =
     Decode.succeed Meal
         |> required "id" Slug.decoder
         |> required "author" (Author.decoder maybeCred)
-        -- TODO: Hacer
-        -- |> required "datetime"
-        |> hardcoded (Time.millisToPosix 0)
+        |> required "datetime" Iso8601.decoder
         |> required "text" Decode.string
-        -- |> required "username" Decode.string
         |> required "calories" Decode.int
 
 

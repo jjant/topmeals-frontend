@@ -83,22 +83,38 @@ role (Cred _ _ r) =
 
 roleDecoder : Decoder Role
 roleDecoder =
-    string
+    Decode.list string
         |> Decode.andThen
-            (\string ->
-                case string of
-                    "Regular" ->
-                        Decode.succeed Regular
-
-                    "Manager" ->
-                        Decode.succeed Manager
-
-                    "Admin" ->
+            (\strings ->
+                let
+                    _ =
+                        Debug.log "Roles" strings
+                in
+                    if List.member "admin" strings then
                         Decode.succeed Admin
-
-                    _ ->
+                    else if List.member "manager" strings then
+                        Decode.succeed Manager
+                    else if List.member "regular" strings then
+                        Decode.succeed Regular
+                    else
                         Decode.fail "Invalid Role"
             )
+
+
+roleEncoder : Role -> Value
+roleEncoder v =
+    Encode.list Encode.string
+        (List.singleton <|
+            case v of
+                Regular ->
+                    "regular"
+
+                Manager ->
+                    "manager"
+
+                Admin ->
+                    "admin"
+        )
 
 
 {-| It's important that this is never exposed!
@@ -114,8 +130,7 @@ credDecoder =
         |> required "username" Username.decoder
         |> required "token" Decode.string
         -- TODO: Add when api is ready
-        -- |> required "role" roleDecoder
-        |> hardcoded Admin
+        |> required "roles" roleDecoder
 
 
 
@@ -148,8 +163,8 @@ decodeFromChange viewerDecoder val =
         |> Result.toMaybe
 
 
-storeCredWith : Cred -> Avatar -> Cmd msg
-storeCredWith (Cred uname token _) avatar =
+storeCredWith : Cred -> Avatar -> Int -> Cmd msg
+storeCredWith (Cred uname token rle) avatar calories =
     let
         json =
             Encode.object
@@ -158,6 +173,8 @@ storeCredWith (Cred uname token _) avatar =
                         [ ( "username", Username.encode uname )
                         , ( "token", Encode.string token )
                         , ( "image", Avatar.encode avatar )
+                        , ( "roles", roleEncoder rle )
+                        , ( "expectedCalories", Encode.int calories )
                         ]
                   )
                 ]

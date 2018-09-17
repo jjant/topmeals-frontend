@@ -87,8 +87,6 @@ init session =
           , feedTab = feedTab
           , feedPage = 1
           , feed = Loading
-
-          -- , meals = Loaded meals
           }
         , Cmd.batch
             [ checkLoggedIn session
@@ -127,6 +125,7 @@ view model =
                         --                 ]
                         --         ]
                         case model.feed of
+                            -- TODO: Renderear user en all meal
                             Loaded feed ->
                                 [ div [ class "feed-toggle" ] <|
                                     List.concat
@@ -314,11 +313,11 @@ fetchFeed session feedTabs page =
                     Api.get (Endpoint.mealsFeed params) maybeCred decoder
 
                 GlobalFeed ->
-                    Api.get (Endpoint.articles params) maybeCred decoder
+                    Api.get (Endpoint.meals params) maybeCred decoder
 
                 AllUsers ->
                     -- TODO: Change
-                    Api.get (Endpoint.articles params) maybeCred decoder
+                    Api.get Endpoint.users maybeCred decoder
     in
         Http.toTask request
             |> Task.map (Feed.init session)

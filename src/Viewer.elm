@@ -72,12 +72,13 @@ decoder =
     Decode.succeed (\av cal credentials -> Viewer av credentials cal)
         |> custom (Decode.field "image" Avatar.decoder)
         -- TODO: Decode calories per day
-        |> hardcoded 0
+        -- |> hardcoded 0
+        |> required "expectedCalories" Decode.int
 
 
 store : Viewer -> Cmd msg
-store (Viewer avatarVal credVal _) =
-    -- TODO: Add save calories
+store (Viewer avatarVal credVal cals) =
     Api.storeCredWith
         credVal
         avatarVal
+        cals

@@ -17,7 +17,6 @@ import Session exposing (Session)
 import Viewer exposing (Viewer)
 
 
-
 -- MODEL
 
 
@@ -114,7 +113,7 @@ viewProblem problem =
                 ServerError str ->
                     str
     in
-    li [] [ text errorMessage ]
+        li [] [ text errorMessage ]
 
 
 viewForm : Form -> Html Msg
@@ -183,14 +182,18 @@ update msg model =
                     Api.decodeErrors error
                         |> List.map ServerError
             in
-            ( { model | problems = List.append model.problems serverErrors }
-            , Cmd.none
-            )
+                ( { model | problems = List.append model.problems serverErrors }
+                , Cmd.none
+                )
 
         CompletedLogin (Ok viewer) ->
-            ( model
-            , Viewer.store viewer
-            )
+            let
+                _ =
+                    Debug.log "Viewer" viewer
+            in
+                ( model
+                , Viewer.store viewer
+                )
 
         GotSession session ->
             ( { model | session = session }
@@ -248,12 +251,12 @@ validate form =
         trimmedForm =
             trimFields form
     in
-    case List.concatMap (validateField trimmedForm) fieldsToValidate of
-        [] ->
-            Ok trimmedForm
+        case List.concatMap (validateField trimmedForm) fieldsToValidate of
+            [] ->
+                Ok trimmedForm
 
-        problems ->
-            Err problems
+            problems ->
+                Err problems
 
 
 validateField : TrimmedForm -> ValidatedField -> List Problem
@@ -263,14 +266,12 @@ validateField (Trimmed form) field =
             Email ->
                 if String.isEmpty form.email then
                     [ "email can't be blank." ]
-
                 else
                     []
 
             Password ->
                 if String.isEmpty form.password then
                     [ "password can't be blank." ]
-
                 else
                     []
 
@@ -303,7 +304,7 @@ login (Trimmed form) =
             Encode.object [ ( "user", user ) ]
                 |> Http.jsonBody
     in
-    Api.login body Viewer.decoder
+        Api.login body Viewer.decoder
 
 
 

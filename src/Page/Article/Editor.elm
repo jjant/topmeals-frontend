@@ -20,6 +20,7 @@ import Session exposing (Session)
 import Task exposing (Task)
 import Time exposing (Posix)
 import Meal exposing (Meal)
+import Iso8601
 
 
 -- MODEL
@@ -38,19 +39,13 @@ type
     | LoadingSlowly Slug
     | LoadingFailed Slug
     | Saving Slug Form
-    | Editing Slug (List Problem) Form
+    | Editing Slug (List String) Form
       -- New meal
-    | EditingNew (List Problem) Form
+    | EditingNew (List String) Form
     | Creating Form
 
 
-type Problem
-    = InvalidEntry ValidatedField String
-    | ServerError String
-
-
 type alias Form =
-    -- TODO: Use proper types
     { text : String
     , calories : String
     , datetime : String
@@ -111,24 +106,15 @@ view model =
     }
 
 
-viewProblems : List Problem -> Html msg
+viewProblems : List String -> Html msg
 viewProblems problems =
     ul [ class "error-messages" ]
         (List.map viewProblem problems)
 
 
-viewProblem : Problem -> Html msg
+viewProblem : String -> Html msg
 viewProblem problem =
-    let
-        errorMessage =
-            case problem of
-                InvalidEntry _ message ->
-                    message
-
-                ServerError message ->
-                    message
-    in
-        li [] [ text errorMessage ]
+    li [] [ text problem ]
 
 
 viewAuthenticated : Cred -> Model -> Html Msg
@@ -190,6 +176,7 @@ viewForm cred fields saveButton =
                     , placeholder "How many calories did this meal contain?"
                     , onInput EnteredCalories
                     , value fields.calories
+                    , type_ "number"
                     ]
                     []
                 ]
@@ -291,10 +278,9 @@ update msg model =
                 status =
                     Editing (Meal.slug meal)
                         []
-                        -- TODO: Format those fields appropiately
                         { text = text
-                        , calories = "" -- calories
-                        , datetime = "" --datetime
+                        , calories = String.fromInt calories
+                        , datetime = Iso8601.fromTime datetime
                         }
             in
                 ( { model | status = status }
@@ -364,7 +350,7 @@ savingError : Http.Error -> Status -> Status
 savingError error status =
     let
         problems =
-            [ ServerError "Error creating meal" ]
+            [ "Error creating meal" ]
     in
         case status of
             Saving slug form ->
@@ -438,59 +424,110 @@ type TrimmedForm
 {-| When adding a variant here, add it to `fieldsToValidate` too!
 -}
 type ValidatedField
-    = Title
-    | Body
+    = Text
+    | Calories
+    | Datetime
 
 
 fieldsToValidate : List ValidatedField
 fieldsToValidate =
-    [ Title
-    , Body
+    [ Text
+    , Calories
+    , Datetime
     ]
 
 
 {-| Trim the form and validate its fields. If there are problems, report them!
 -}
-validate : Form -> Result (List Problem) TrimmedForm
+validate : Form -> Result (List String) ValidForm
 validate form =
     let
         trimmedForm =
             trimFields form
     in
-        case List.concatMap (validateField trimmedForm) fieldsToValidate of
-            [] ->
-                Ok trimmedForm
-
-            problems ->
-                Err problems
+        validateFields trimmedForm
 
 
-validateField : TrimmedForm -> ValidatedField -> List Problem
-validateField (Trimmed form) field =
-    List.map (InvalidEntry field) <|
-        case field of
-            Title ->
-                if String.isEmpty form.text then
-                    [ "Meal name can't be blank." ]
-                else
-                    []
+type alias ValidForm =
+    { text : String, calories : Int, datetime : Posix }
 
-            Body ->
-                if String.isEmpty form.calories then
-                    [ "Calories can't be blank." ]
-                else
-                    []
+
+validateFields : TrimmedForm -> Result (List String) ValidForm
+validateFields (Trimmed form) =
+    let
+        rCalories : Result (List String) Int
+        rCalories =
+            form.calories
+                |> String.toInt
+                |> Result.fromMaybe [ "Calories can't be blank and must be a number." ]
+
+        rText : Result (List String) String
+        rText =
+            case String.isEmpty form.text of
+                True ->
+                    Err [ "Meal name can't be blank." ]
+
+                False ->
+                    Ok form.text
+
+        rDatetime : Result (List String) Posix
+        rDatetime =
+            Iso8601.toTime form.datetime
+                |> Result.mapError (\_ -> [ "Must be a valid date" ])
+    in
+        combine3 (\cal text dt -> { text = text, calories = cal, datetime = dt })
+            rCalories
+            rText
+            rDatetime
+
+
+combine2 : (v1 -> v2 -> r) -> Result (List a) v1 -> Result (List a) v2 -> Result (List a) r
+combine2 f res1 res2 =
+    case ( res1, res2 ) of
+        ( Err er1, Err er2 ) ->
+            Err (er1 ++ er2)
+
+        ( Err er1, _ ) ->
+            Err er1
+
+        ( _, Err er2 ) ->
+            Err er2
+
+        ( Ok ok1, Ok ok2 ) ->
+            Ok (f ok1 ok2)
+
+
+combine3 : (v1 -> v2 -> v3 -> r) -> Result (List a) v1 -> Result (List a) v2 -> Result (List a) v3 -> Result (List a) r
+combine3 f res1 res2 res3 =
+    case ( combine2 f res1 res2, res3 ) of
+        ( Err er12, Err er3 ) ->
+            Err (er12 ++ er3)
+
+        ( Err er12, Ok _ ) ->
+            Err er12
+
+        ( Ok _, Err er3 ) ->
+            Err er3
+
+        ( Ok ok12, Ok ok3 ) ->
+            Ok (ok12 ok3)
+
+
+
+-- combine3 : (v1 -> v2 -> v3 -> r) -> Result (List a) v1 -> Result (List a) v2 -> Result (List a) v3 -> Result (List a) r
+-- combine3 f res1 res2 res3 =
+--   case (res1, res2, res3) of
 
 
 {-| Don't trim while the user is typing! That would be super annoying.
 Instead, trim only on submit.
 -}
 trimFields : Form -> TrimmedForm
-trimFields form =
+trimFields { text, calories, datetime } =
     Trimmed
-        { text = String.trim form.text
-        , calories = String.trim form.calories
-        , datetime = String.trim form.datetime
+        { text = String.trim text
+        , calories = String.trim calories
+        , datetime = String.trim datetime
         }
 
 
@@ -498,18 +535,14 @@ trimFields form =
 -- HTTP
 
 
-create : TrimmedForm -> Cred -> Http.Request Meal
-create (Trimmed form) cred =
+create : ValidForm -> Cred -> Http.Request Meal
+create validForm cred =
     let
         meal =
             Encode.object
-                [ ( "text", Encode.string form.text )
-
-                -- TODO: Send correct types
-                -- , ( "calories", Encode.string form.calories )
-                -- , ( "datetime", Encode.string form.datetime )
-                , ( "datetime", Encode.string "2018-09-17T14:53:16+00:00" )
-                , ( "calories", Encode.int 42 )
+                [ ( "text", Encode.string validForm.text )
+                , ( "calories", Encode.int validForm.calories )
+                , ( "datetime", Encode.string (Iso8601.fromTime validForm.datetime) )
                 ]
 
         body =
@@ -520,16 +553,14 @@ create (Trimmed form) cred =
             |> Api.post (Endpoint.meals []) (Just cred) body
 
 
-edit : Slug -> TrimmedForm -> Cred -> Http.Request Meal
-edit slug (Trimmed form) cred =
+edit : Slug -> ValidForm -> Cred -> Http.Request Meal
+edit slug validForm cred =
     let
         meal =
             Encode.object
-                [ ( "text", Encode.string form.text )
-
-                -- Send correct types
-                , ( "calories", Encode.string form.calories )
-                , ( "datetime", Encode.string form.datetime )
+                [ ( "text", Encode.string validForm.text )
+                , ( "calories", Encode.int validForm.calories )
+                , ( "datetime", Encode.string (Iso8601.fromTime validForm.datetime) )
                 ]
 
         body =
