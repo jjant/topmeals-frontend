@@ -25,6 +25,7 @@ type Route
     | NewArticle
     | EditArticle Slug
     | NewMeal
+    | ValidateAccount String
 
 
 parser : Parser (Route -> a) a
@@ -39,6 +40,7 @@ parser =
         , Parser.map Meal (s "meal" </> Slug.urlParser)
         , Parser.map NewArticle (s "editor")
         , Parser.map EditArticle (s "editor" </> Slug.urlParser)
+        , Parser.map ValidateAccount (s "validate" </> string)
         ]
 
 
@@ -106,5 +108,8 @@ routeToString page =
 
                 NewMeal ->
                     [ "meal" ]
+
+                ValidateAccount s ->
+                    [ "validate", s ]
     in
         "#/" ++ String.join "/" pieces

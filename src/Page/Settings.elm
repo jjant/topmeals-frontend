@@ -77,8 +77,7 @@ formDecoder =
         |> required "username" Decode.string
         |> hardcoded ""
         -- TODO: Handle this, remove the hardcoded below
-        -- |> required "calories" Decode.string
-        |> hardcoded ""
+        |> required "expectedCalories" (Decode.map String.fromInt Decode.int)
 
 
 {-| A form that has been validated. Only the `edit` function uses this. Its
@@ -155,6 +154,7 @@ viewForm cred form =
                     , placeholder "Expected calories per day (cal)"
                     , value form.calories
                     , onInput EnteredCalories
+                    , type_ "number"
                     ]
                     []
                 ]

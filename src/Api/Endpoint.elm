@@ -14,6 +14,7 @@ module Api.Endpoint
         , meal
         , meals
         , mealsFeed
+        , validateUser
         )
 
 import Article.Slug as Slug exposing (Slug)
@@ -145,3 +146,12 @@ meals params =
 mealsFeed : List QueryParameter -> Endpoint
 mealsFeed params =
     url [ "meals", "feed" ] params
+
+
+
+---- Validate account
+
+
+validateUser : List QueryParameter -> Endpoint
+validateUser params =
+    url [ "users", "validate" ] params

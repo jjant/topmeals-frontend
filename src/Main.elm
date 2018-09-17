@@ -17,6 +17,7 @@ import Page.NotFound as NotFound
 import Page.Profile as Profile
 import Page.Register as Register
 import Page.Settings as Settings
+import Page.ValidateAccount as ValidateAccount
 import Route exposing (Route)
 import Session exposing (Session)
 import Task
@@ -43,6 +44,7 @@ type Model
     | Profile Username Profile.Model
     | Article Article.Model
     | Editor (Maybe Slug) Editor.Model
+    | ValidateAccount ValidateAccount.Model
 
 
 
@@ -102,6 +104,9 @@ view model =
             Editor (Just _) editor ->
                 viewPage Page.Other GotEditorMsg (Editor.view editor)
 
+            ValidateAccount val ->
+                viewPage Page.Other GotValidateAccountMsg (ValidateAccount.view val)
+
 
 
 -- UPDATE
@@ -120,6 +125,7 @@ type Msg
     | GotArticleMsg Article.Msg
     | GotEditorMsg Editor.Msg
     | GotSession Session
+    | GotValidateAccountMsg ValidateAccount.Msg
 
 
 toSession : Model -> Session
@@ -151,6 +157,9 @@ toSession page =
 
         Editor _ editor ->
             Editor.toSession editor
+
+        ValidateAccount val ->
+            ValidateAccount.toSession val
 
 
 changeRouteTo : Maybe Route -> Model -> ( Model, Cmd Msg )
@@ -204,6 +213,10 @@ changeRouteTo maybeRoute model =
             Just Route.NewMeal ->
                 Editor.initNew session
                     |> updateWith (Editor Nothing) GotEditorMsg model
+
+            Just (Route.ValidateAccount validateKey) ->
+                ValidateAccount.init session validateKey
+                    |> updateWith ValidateAccount GotValidateAccountMsg model
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -276,6 +289,10 @@ update msg model =
             , Route.replaceUrl (Session.navKey session) Route.Home
             )
 
+        ( GotValidateAccountMsg subMsg, ValidateAccount submodel ) ->
+            ValidateAccount.update subMsg submodel
+                |> updateWith ValidateAccount GotValidateAccountMsg model
+
         ( _, _ ) ->
             -- Disregard messages that arrived for the wrong page.
             ( model, Cmd.none )
@@ -321,6 +338,9 @@ subscriptions model =
 
         Editor _ editor ->
             Sub.map GotEditorMsg (Editor.subscriptions editor)
+
+        ValidateAccount _ ->
+            Sub.none
 
 
 
