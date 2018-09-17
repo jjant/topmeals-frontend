@@ -27,17 +27,13 @@ import Viewer exposing (Viewer)
 
 type alias Model =
     { session : Session
-    , problems : List Problem
+    , problems : List String
     , status : Status
     }
 
 
 type alias Form =
     { avatar : String
-    , bio : String
-    , email : String
-    , username : String
-    , password : String
     , calories : String
     }
 
@@ -47,11 +43,6 @@ type Status
     | LoadingSlowly
     | Loaded Form
     | Failed
-
-
-type Problem
-    = InvalidEntry ValidatedField String
-    | ServerError String
 
 
 init : Session -> ( Model, Cmd Msg )
@@ -72,11 +63,6 @@ formDecoder : Decoder Form
 formDecoder =
     Decode.succeed Form
         |> required "image" (Decode.map (Maybe.withDefault "") (Decode.nullable Decode.string))
-        |> required "bio" (Decode.map (Maybe.withDefault "") (Decode.nullable Decode.string))
-        |> required "email" Decode.string
-        |> required "username" Decode.string
-        |> hardcoded ""
-        -- TODO: Handle this, remove the hardcoded below
         |> required "expectedCalories" (Decode.map String.fromInt Decode.int)
 
 
@@ -165,18 +151,9 @@ viewForm cred form =
         ]
 
 
-viewProblem : Problem -> Html msg
+viewProblem : String -> Html msg
 viewProblem problem =
-    let
-        errorMessage =
-            case problem of
-                InvalidEntry _ message ->
-                    message
-
-                ServerError message ->
-                    message
-    in
-        li [] [ text errorMessage ]
+    li [] [ text problem ]
 
 
 
@@ -185,10 +162,6 @@ viewProblem problem =
 
 type Msg
     = SubmittedForm Cred Form
-    | EnteredEmail String
-    | EnteredUsername String
-    | EnteredPassword String
-    | EnteredBio String
     | EnteredAvatar String
     | EnteredCalories String
     | CompletedFormLoad (Result Http.Error Form)
@@ -223,18 +196,6 @@ update msg model =
                     , Cmd.none
                     )
 
-        EnteredEmail email ->
-            updateForm (\form -> { form | email = email }) model
-
-        EnteredUsername username ->
-            updateForm (\form -> { form | username = username }) model
-
-        EnteredPassword password ->
-            updateForm (\form -> { form | password = password }) model
-
-        EnteredBio bio ->
-            updateForm (\form -> { form | bio = bio }) model
-
         EnteredAvatar avatar ->
             updateForm (\form -> { form | avatar = avatar }) model
 
@@ -245,7 +206,6 @@ update msg model =
             let
                 serverErrors =
                     Api.decodeErrors error
-                        |> List.map ServerError
             in
                 ( { model | problems = List.append model.problems serverErrors }
                 , Cmd.none
@@ -335,45 +295,29 @@ fieldsToValidate =
 
 {-| Trim the form and validate its fields. If there are problems, report them!
 -}
-validate : Form -> Result (List Problem) TrimmedForm
+validate : Form -> Result (List String) ValidForm2
 validate form =
     let
         trimmedForm =
             trimFields form
     in
-        case List.concatMap (validateField trimmedForm) fieldsToValidate of
-            [] ->
-                Ok trimmedForm
-
-            problems ->
-                Err problems
+        validateFields trimmedForm
 
 
-validateField : TrimmedForm -> ValidatedField -> List Problem
-validateField (Trimmed form) field =
-    List.map (InvalidEntry field) <|
-        case field of
-            Username ->
-                if String.isEmpty form.username then
-                    [ "username can't be blank." ]
-                else
-                    []
+type alias ValidForm2 =
+    { avatar : String, calories : Int }
 
-            Email ->
-                if String.isEmpty form.email then
-                    [ "email can't be blank." ]
-                else
-                    []
 
-            Password ->
-                let
-                    passwordLength =
-                        String.length form.password
-                in
-                    if passwordLength > 0 && passwordLength < Viewer.minPasswordChars then
-                        [ "password must be at least " ++ String.fromInt Viewer.minPasswordChars ++ " characters long." ]
-                    else
-                        []
+validateFields : TrimmedForm -> Result (List String) ValidForm2
+validateFields (Trimmed form) =
+    let
+        rCalories : Result (List String) Int
+        rCalories =
+            form.calories
+                |> String.toInt
+                |> Result.fromMaybe [ "Calories can't be blank and must be a number." ]
+    in
+        Result.map (\cal -> { calories = cal, avatar = form.avatar }) rCalories
 
 
 {-| Don't trim while the user is typing! That would be super annoying.
@@ -383,10 +327,6 @@ trimFields : Form -> TrimmedForm
 trimFields form =
     Trimmed
         { avatar = String.trim form.avatar
-        , bio = String.trim form.bio
-        , email = String.trim form.email
-        , username = String.trim form.username
-        , password = String.trim form.password
         , calories = String.trim form.calories
         }
 
@@ -398,8 +338,8 @@ trimFields form =
 {-| This takes a Valid Form as a reminder that it needs to have been validated
 first.
 -}
-edit : Cred -> TrimmedForm -> Http.Request Viewer
-edit cred (Trimmed form) =
+edit : Cred -> ValidForm2 -> Http.Request Viewer
+edit cred form =
     let
         encodedAvatar =
             case form.avatar of
@@ -410,23 +350,13 @@ edit cred (Trimmed form) =
                     Encode.string avatar
 
         updates =
-            [ ( "username", Encode.string form.username )
-            , ( "email", Encode.string form.email )
-            , ( "bio", Encode.string form.bio )
-            , ( "image", encodedAvatar )
-            ]
-
-        encodedUser =
-            Encode.object <|
-                case form.password of
-                    "" ->
-                        updates
-
-                    password ->
-                        ( "password", Encode.string password ) :: updates
+            Encode.object
+                [ ( "image", encodedAvatar )
+                , ( "expectedCalories", Encode.int form.calories )
+                ]
 
         body =
-            Encode.object [ ( "user", encodedUser ) ]
+            Encode.object [ ( "user", updates ) ]
                 |> Http.jsonBody
     in
         Api.settings cred body Viewer.decoder

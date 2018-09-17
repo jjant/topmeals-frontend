@@ -21,6 +21,7 @@ import Task exposing (Task)
 import Time exposing (Posix)
 import Meal exposing (Meal)
 import Iso8601
+import Util exposing (combine2, combine3)
 
 
 -- MODEL
@@ -48,7 +49,8 @@ type
 type alias Form =
     { text : String
     , calories : String
-    , datetime : String
+    , date : String
+    , time : String
     }
 
 
@@ -59,7 +61,8 @@ initNew session =
             EditingNew []
                 { text = ""
                 , calories = ""
-                , datetime = ""
+                , date = ""
+                , time = ""
                 }
       }
     , Cmd.none
@@ -183,9 +186,18 @@ viewForm cred fields saveButton =
             , fieldset [ class "form-group" ]
                 [ input
                     [ class "form-control"
-                    , placeholder "When did you have this meal?"
-                    , onInput EnteredDatetime
-                    , value fields.datetime
+                    , placeholder "When did you have this meal? (DD/MM/YYYY)"
+                    , onInput EnteredDate
+                    , value fields.date
+                    ]
+                    []
+                ]
+            , fieldset [ class "form-group" ]
+                [ input
+                    [ class "form-control"
+                    , placeholder "At what time did you have this meal? (HH:MM)"
+                    , onInput EnteredTime
+                    , value fields.time
                     ]
                     []
                 ]
@@ -216,9 +228,10 @@ saveArticleButton caption extraAttrs =
 
 type Msg
     = ClickedSave Cred
-    | EnteredDatetime String
     | EnteredCalories String
     | EnteredText String
+    | EnteredTime String
+    | EnteredDate String
     | CompletedCreate (Result Http.Error Meal)
     | CompletedEdit (Result Http.Error Meal)
     | CompletedArticleLoad (Result ( Slug, Http.Error ) Meal)
@@ -240,8 +253,11 @@ update msg model =
         EnteredCalories calories ->
             updateForm (\form -> { form | calories = calories }) model
 
-        EnteredDatetime datetime ->
-            updateForm (\form -> { form | datetime = datetime }) model
+        EnteredDate date ->
+            updateForm (\form -> { form | date = date }) model
+
+        EnteredTime time ->
+            updateForm (\form -> { form | time = time }) model
 
         CompletedCreate (Ok meal) ->
             ( model
@@ -280,7 +296,8 @@ update msg model =
                         []
                         { text = text
                         , calories = String.fromInt calories
-                        , datetime = Iso8601.fromTime datetime
+                        , date = Util.toDDMMYYYY datetime
+                        , time = Util.toHHMM datetime
                         }
             in
                 ( { model | status = status }
@@ -470,47 +487,25 @@ validateFields (Trimmed form) =
                 False ->
                     Ok form.text
 
+        yearsFormatted =
+            -- dd/mm/yyyy -> yyyy-mm-dd
+            form.date
+                |> String.split "/"
+                |> List.reverse
+                |> String.join "-"
+
+        timeFormatted =
+            form.time ++ ":00Z"
+
         rDatetime : Result (List String) Posix
         rDatetime =
-            Iso8601.toTime form.datetime
+            Iso8601.toTime (yearsFormatted ++ "T" ++ timeFormatted)
                 |> Result.mapError (\_ -> [ "Must be a valid date" ])
     in
         combine3 (\cal text dt -> { text = text, calories = cal, datetime = dt })
             rCalories
             rText
             rDatetime
-
-
-combine2 : (v1 -> v2 -> r) -> Result (List a) v1 -> Result (List a) v2 -> Result (List a) r
-combine2 f res1 res2 =
-    case ( res1, res2 ) of
-        ( Err er1, Err er2 ) ->
-            Err (er1 ++ er2)
-
-        ( Err er1, _ ) ->
-            Err er1
-
-        ( _, Err er2 ) ->
-            Err er2
-
-        ( Ok ok1, Ok ok2 ) ->
-            Ok (f ok1 ok2)
-
-
-combine3 : (v1 -> v2 -> v3 -> r) -> Result (List a) v1 -> Result (List a) v2 -> Result (List a) v3 -> Result (List a) r
-combine3 f res1 res2 res3 =
-    case ( combine2 f res1 res2, res3 ) of
-        ( Err er12, Err er3 ) ->
-            Err (er12 ++ er3)
-
-        ( Err er12, Ok _ ) ->
-            Err er12
-
-        ( Ok _, Err er3 ) ->
-            Err er3
-
-        ( Ok ok12, Ok ok3 ) ->
-            Ok (ok12 ok3)
 
 
 
@@ -523,11 +518,12 @@ combine3 f res1 res2 res3 =
 Instead, trim only on submit.
 -}
 trimFields : Form -> TrimmedForm
-trimFields { text, calories, datetime } =
+trimFields { text, calories, date, time } =
     Trimmed
         { text = String.trim text
         , calories = String.trim calories
-        , datetime = String.trim datetime
+        , date = String.trim date
+        , time = String.trim time
         }
 
 

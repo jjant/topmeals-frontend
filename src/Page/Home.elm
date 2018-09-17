@@ -274,7 +274,7 @@ update msg model =
             ( { model | timeZone = tz }, Cmd.none )
 
         GotSession session ->
-            ( { model | session = session }, Cmd.none )
+            ( { model | session = session }, checkLoggedIn session )
 
         PassedSlowLoadThreshold ->
             let

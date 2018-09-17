@@ -176,7 +176,9 @@ changeRouteTo maybeRoute model =
                 ( model, Route.replaceUrl (Session.navKey session) Route.Home )
 
             Just Route.Logout ->
-                ( model, Api.logout )
+                ( model
+                , Api.logout
+                )
 
             Just Route.NewArticle ->
                 Editor.initNew session

@@ -22,11 +22,9 @@
 
 * Filter by dates from-to, time from-to (e.g. how much calories have I had for lunch each day in the last month if lunch is between 12 and 15h).
 
-* User setting – Expected number of calories per day.
+- When meals are displayed, they go green if the total for that day is less than expected number of calories per day, otherwise they go red.
 
-* When meals are displayed, they go green if the total for that day is less than expected number of calories per day, otherwise they go red.
-
-* Users have to be able to upload and change their profile picture. If they log in using a social media pull the image from their account they used to log in.
+- Users have to be able to upload and change their profile picture. If they log in using a social media pull the image from their account they used to log in.
 
 # Backend
 
