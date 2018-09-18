@@ -14,13 +14,13 @@ import Session exposing (Session)
 import Viewer exposing (Viewer)
 
 
-
 -- MODEL
 
 
 type alias Model =
     { session : Session
     , problems : List Problem
+    , messages : List String
     , form : Form
     }
 
@@ -41,6 +41,7 @@ init : Session -> ( Model, Cmd msg )
 init session =
     ( { session = session
       , problems = []
+      , messages = []
       , form =
             { email = ""
             , username = ""
@@ -68,6 +69,8 @@ view model =
                             [ a [ Route.href Route.Login ]
                                 [ text "Have an account?" ]
                             ]
+                        , ul []
+                            (List.map viewMessage model.messages)
                         , ul [ class "error-messages" ]
                             (List.map viewProblem model.problems)
                         , viewForm model.form
@@ -125,7 +128,12 @@ viewProblem problem =
                 ServerError str ->
                     str
     in
-    li [] [ text errorMessage ]
+        li [] [ text errorMessage ]
+
+
+viewMessage : String -> Html msg
+viewMessage msg =
+    li [] [ text msg ]
 
 
 
@@ -137,7 +145,7 @@ type Msg
     | EnteredEmail String
     | EnteredUsername String
     | EnteredPassword String
-    | CompletedRegister (Result Http.Error Viewer)
+    | CompletedRegister (Result Http.Error ())
     | GotSession Session
 
 
@@ -171,13 +179,13 @@ update msg model =
                     Api.decodeErrors error
                         |> List.map ServerError
             in
-            ( { model | problems = List.append model.problems serverErrors }
-            , Cmd.none
-            )
+                ( { model | problems = List.append model.problems serverErrors }
+                , Cmd.none
+                )
 
-        CompletedRegister (Ok viewer) ->
-            ( model
-            , Viewer.store viewer
+        CompletedRegister (Ok _) ->
+            ( { model | messages = [ "Your account has been created! Please check your email to validate it." ] }
+            , Cmd.none
             )
 
         GotSession session ->
@@ -247,12 +255,12 @@ validate form =
         trimmedForm =
             trimFields form
     in
-    case List.concatMap (validateField trimmedForm) fieldsToValidate of
-        [] ->
-            Ok trimmedForm
+        case List.concatMap (validateField trimmedForm) fieldsToValidate of
+            [] ->
+                Ok trimmedForm
 
-        problems ->
-            Err problems
+            problems ->
+                Err problems
 
 
 validateField : TrimmedForm -> ValidatedField -> List Problem
@@ -262,24 +270,20 @@ validateField (Trimmed form) field =
             Username ->
                 if String.isEmpty form.username then
                     [ "username can't be blank." ]
-
                 else
                     []
 
             Email ->
                 if String.isEmpty form.email then
                     [ "email can't be blank." ]
-
                 else
                     []
 
             Password ->
                 if String.isEmpty form.password then
                     [ "password can't be blank." ]
-
                 else if String.length form.password < Viewer.minPasswordChars then
                     [ "password must be at least " ++ String.fromInt Viewer.minPasswordChars ++ " characters long." ]
-
                 else
                     []
 
@@ -300,7 +304,7 @@ trimFields form =
 -- HTTP
 
 
-register : TrimmedForm -> Http.Request Viewer
+register : TrimmedForm -> Http.Request ()
 register (Trimmed form) =
     let
         user =
@@ -314,4 +318,4 @@ register (Trimmed form) =
             Encode.object [ ( "user", user ) ]
                 |> Http.jsonBody
     in
-    Api.register body Viewer.decoder
+        Api.register body (Decode.succeed ())

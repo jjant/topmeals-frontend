@@ -319,9 +319,9 @@ login body decoder =
     post Endpoint.login Nothing body (Decode.field "user" (decoderFromCred decoder))
 
 
-register : Http.Body -> Decoder (Cred -> a) -> Http.Request a
-register body decoder =
-    post Endpoint.users Nothing body (Decode.field "user" (decoderFromCred decoder))
+register : Http.Body -> Decoder a -> Http.Request a
+register body d =
+    post Endpoint.users Nothing body d
 
 
 settings : Cred -> Http.Body -> Decoder (Cred -> a) -> Http.Request a

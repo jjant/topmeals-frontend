@@ -82,6 +82,26 @@ checkPermissions session profileUsername =
             |> Maybe.withDefault redirectToHome
 
 
+isAdminOrSelf : Session -> Username -> Bool
+isAdminOrSelf session profileUsername =
+    session
+        |> Session.cred
+        |> Maybe.map (\cred -> ( Api.username cred, Api.role cred ))
+        |> Maybe.map
+            (\( username, role ) ->
+                case role of
+                    Regular ->
+                        username == profileUsername
+
+                    Manager ->
+                        False
+
+                    Admin ->
+                        True
+            )
+        |> Maybe.withDefault False
+
+
 init : Session -> Username -> ( Model, Cmd Msg )
 init session username =
     let
@@ -248,11 +268,18 @@ view model =
                                             [ div [ class "col-xs-12 col-md-10 offset-md-1" ]
                                                 [ div [ class "articles-toggle" ] <|
                                                     List.concat
-                                                        [ [ viewTabs ]
-                                                        , Feed.viewMeals model.timeZone
-                                                            feed
-                                                            True
-                                                            |> List.map (Html.map GotFeedMsg)
+                                                        [ if isAdminOrSelf model.session (currentUsername model) then
+                                                            [ viewTabs ]
+                                                          else
+                                                            []
+                                                        , if isAdminOrSelf model.session (currentUsername model) then
+                                                            (Feed.viewMeals model.timeZone
+                                                                feed
+                                                                True
+                                                                |> List.map (Html.map GotFeedMsg)
+                                                            )
+                                                          else
+                                                            []
 
                                                         -- , Feed.viewArticles model.timeZone feed
                                                         --     |> List.map (Html.map GotFeedMsg)
@@ -440,9 +467,7 @@ update msg model =
             ( model, Route.replaceUrl (Session.navKey model.session) Route.Home )
 
         CompletedDeleteProfile (Err error) ->
-            ( { model | errors = Api.addServerError model.errors }
-            , Log.error
-            )
+            ( model, Route.replaceUrl (Session.navKey model.session) Route.Home )
 
         ClickedUnblockProfile cred ->
             ( model, unblock (currentUsername model) cred |> Http.send CompletedUnblockProfile )

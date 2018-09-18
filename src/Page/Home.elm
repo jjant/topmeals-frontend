@@ -262,7 +262,15 @@ viewTabs : Maybe Cred -> FeedTab -> Html Msg
 viewTabs maybeCred tab =
     case tab of
         YourFeed cred ->
-            Feed.viewTabs [] (yourFeed cred) [ allMeals, allUsers ]
+            case Api.role cred of
+                Api.Admin ->
+                    Feed.viewTabs [] (yourFeed cred) [ allMeals, allUsers ]
+
+                Api.Manager ->
+                    Feed.viewTabs [] (yourFeed cred) [ allUsers ]
+
+                Api.Regular ->
+                    Feed.viewTabs [] (yourFeed cred) []
 
         GlobalFeed ->
             let
@@ -274,7 +282,18 @@ viewTabs maybeCred tab =
                         Nothing ->
                             []
             in
-                Feed.viewTabs otherTabs allMeals [ allUsers ]
+                case Maybe.map Api.role maybeCred of
+                    Just Api.Admin ->
+                        Feed.viewTabs otherTabs allMeals [ allUsers ]
+
+                    Just Api.Manager ->
+                        Feed.viewTabs otherTabs allMeals [ allUsers ]
+
+                    Just Api.Regular ->
+                        Feed.viewTabs otherTabs allMeals []
+
+                    _ ->
+                        Feed.viewTabs [] allMeals []
 
         AllUsers ->
             let
@@ -286,7 +305,13 @@ viewTabs maybeCred tab =
                         Nothing ->
                             []
                     )
-                        ++ [ allMeals ]
+                        ++ (case Maybe.map Api.role maybeCred of
+                                Just Api.Admin ->
+                                    [ allMeals ]
+
+                                _ ->
+                                    []
+                           )
             in
                 Feed.viewTabs otherTabs allUsers []
 
@@ -382,20 +407,13 @@ update : Msg -> Model -> ( Model, Cmd Msg )
 update msg model =
     case msg of
         ClickedTab tab ->
-            ( { model | feedTab = tab }
-            , case model.feedTab of
-                YourFeed _ ->
-                    fetchMyMeals model.session 1 model
-                        |> Task.attempt CompletedFeedLoad
-
-                GlobalFeed ->
-                    fetchAllMeals model.session 1 model
-                        |> Task.attempt CompletedFeedLoad
-
-                AllUsers ->
-                    fetchUsers model.session 1
-                        |> Task.attempt CompletedUsersLoad
-            )
+            let
+                newModel =
+                    { model | feedTab = tab }
+            in
+                ( newModel
+                , fetchForTab newModel.feedTab newModel.session 1 newModel
+                )
 
         ClickedAllUsersTab ->
             ( { model | feedTab = AllUsers }
@@ -477,9 +495,7 @@ update msg model =
                     { model | minTime = String.toInt sint }
             in
                 ( newModel
-                , fetchMyMeals newModel.session newModel.feedPage newModel
-                    |> Task.andThen (\feed -> Task.map (\_ -> feed) scrollToTop)
-                    |> Task.attempt CompletedFeedLoad
+                , fetchForTab newModel.feedTab newModel.session newModel.feedPage newModel
                 )
 
         EnteredMaxTime sint ->
@@ -488,9 +504,7 @@ update msg model =
                     { model | maxTime = String.toInt sint }
             in
                 ( newModel
-                , fetchMyMeals newModel.session newModel.feedPage newModel
-                    |> Task.andThen (\feed -> Task.map (\_ -> feed) scrollToTop)
-                    |> Task.attempt CompletedFeedLoad
+                , fetchForTab newModel.feedTab newModel.session newModel.feedPage newModel
                 )
 
         EnteredMinDate sDate ->
@@ -511,9 +525,7 @@ update msg model =
             in
                 ( newModel
                 , if shouldRequest then
-                    fetchMyMeals newModel.session newModel.feedPage newModel
-                        |> Task.andThen (\feed -> Task.map (\_ -> feed) scrollToTop)
-                        |> Task.attempt CompletedFeedLoad
+                    fetchForTab newModel.feedTab newModel.session newModel.feedPage newModel
                   else
                     Cmd.none
                 )
@@ -536,9 +548,7 @@ update msg model =
             in
                 ( newModel
                 , if shouldRequest then
-                    fetchMyMeals newModel.session newModel.feedPage newModel
-                        |> Task.andThen (\feed -> Task.map (\_ -> feed) scrollToTop)
-                        |> Task.attempt CompletedFeedLoad
+                    fetchForTab newModel.feedTab newModel.session newModel.feedPage newModel
                   else
                     Cmd.none
                 )
@@ -607,7 +617,7 @@ fetchMyMeals session page filters =
 
 
 fetchAllMeals : Session -> Int -> Filters a -> Task Http.Error Feed.Model
-fetchAllMeals session page { minDate, maxDate, minTime, maxTime } =
+fetchAllMeals session page filters =
     let
         maybeCred =
             Session.cred session
@@ -616,14 +626,10 @@ fetchAllMeals session page { minDate, maxDate, minTime, maxTime } =
             Feed.decoder maybeCred articlesPerPage
 
         filterParams =
-            [ ("minDate")
-            , ("maxDate")
-            , ("minTime")
-            , ("maxTime")
-            ]
+            makeFilters filters
 
         params =
-            PaginatedList.params { page = page, resultsPerPage = articlesPerPage }
+            filterParams ++ PaginatedList.params { page = page, resultsPerPage = articlesPerPage }
     in
         Api.get (Endpoint.meals params) maybeCred decoder
             |> Http.toTask
@@ -641,6 +647,22 @@ fetchUsers session page =
     in
         Api.get Endpoint.users maybeCred (Decode.list Profile.decoderFull)
             |> Http.toTask
+
+
+fetchForTab : FeedTab -> Session -> Int -> Filters a -> Cmd Msg
+fetchForTab feedTab session int filters =
+    case feedTab of
+        YourFeed _ ->
+            fetchMyMeals session 1 filters
+                |> Task.attempt CompletedFeedLoad
+
+        GlobalFeed ->
+            fetchAllMeals session 1 filters
+                |> Task.attempt CompletedFeedLoad
+
+        AllUsers ->
+            fetchUsers session 1
+                |> Task.attempt CompletedUsersLoad
 
 
 articlesPerPage : Int
