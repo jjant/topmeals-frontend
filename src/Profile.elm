@@ -1,4 +1,14 @@
-module Profile exposing (Profile, avatar, bio, calories, decoder)
+module Profile
+    exposing
+        ( Profile
+        , ProfileWithUsername
+        , avatar
+        , bio
+        , calories
+        , username
+        , decoder
+        , decoderFull
+        )
 
 {-| A user's profile - potentially your own!
 
@@ -47,6 +57,11 @@ calories (Profile info) =
     info.calories
 
 
+username : ProfileWithUsername -> Username
+username p =
+    p.username
+
+
 
 -- SERIALIZATION
 
@@ -58,3 +73,19 @@ decoder =
         |> required "image" Avatar.decoder
         |> required "expectedCalories" Decode.int
         |> Decode.map Profile
+
+
+type alias ProfileWithUsername =
+    { username : Username
+    , profile : Profile
+    }
+
+
+decoderFull : Decoder ProfileWithUsername
+decoderFull =
+    decoder
+        |> Decode.andThen
+            (\profile ->
+                Decode.succeed (\uname -> ProfileWithUsername uname profile)
+                    |> required "username" Username.decoder
+            )

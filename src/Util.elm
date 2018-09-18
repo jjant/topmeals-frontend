@@ -5,6 +5,7 @@ module Util
         , combine3
         , toDDMMYYYY
         , toHHMM
+        , isJust
         )
 
 import Time exposing (Month(..), Posix, utc)
@@ -138,3 +139,13 @@ intToStringPadded int =
         "0" ++ (String.fromInt int)
     else
         (String.fromInt int)
+
+
+isJust : Maybe a -> Bool
+isJust aMaybe =
+    case aMaybe of
+        Just _ ->
+            True
+
+        Nothing ->
+            False

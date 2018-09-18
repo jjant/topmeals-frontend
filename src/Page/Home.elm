@@ -12,26 +12,32 @@ module Page.Home
 {-| The homepage. You can get here via either the / or /#/ routes.
 -}
 
+import Author
 import Api exposing (Cred)
 import Api.Endpoint as Endpoint
 import Article exposing (Article, Preview)
 import Article.Feed as Feed
+import Avatar
 import Browser.Dom as Dom
 import Html exposing (..)
-import Html.Attributes exposing (attribute, class, classList, href, id, placeholder)
-import Html.Events exposing (onClick)
+import Html.Attributes exposing (attribute, class, classList, href, id, placeholder, value)
+import Html.Events exposing (onClick, onInput, on, targetValue)
 import Http
 import Loading
 import Log
 import Page
+import Json.Decode as Decode
 import PaginatedList exposing (PaginatedList)
 import Session exposing (Session)
 import Task exposing (Task)
-import Time
-import Url.Builder
+import Time exposing (Posix)
+import Url.Builder exposing (QueryParameter)
 import Username exposing (Username)
 import Route
 import Meal exposing (Meal)
+import Profile exposing (ProfileWithUsername)
+import Iso8601
+import Util exposing (isJust)
 
 
 -- MODEL
@@ -45,6 +51,13 @@ type alias Model =
 
     -- Loaded independently from server
     , feed : Status Feed.Model
+    , users : Status (List ProfileWithUsername)
+
+    -- Filters
+    , minTime : Maybe Int
+    , maxTime : Maybe Int
+    , minDate : Maybe Posix
+    , maxDate : Maybe Posix
     }
 
 
@@ -59,6 +72,26 @@ type FeedTab
     = YourFeed Cred
     | GlobalFeed
     | AllUsers
+
+
+isMealsTab : FeedTab -> Bool
+isMealsTab feedTab =
+    case feedTab of
+        AllUsers ->
+            False
+
+        _ ->
+            True
+
+
+isYourFeed : FeedTab -> Bool
+isYourFeed tab =
+    case tab of
+        YourFeed _ ->
+            True
+
+        _ ->
+            False
 
 
 checkLoggedIn : Session -> Cmd Msg
@@ -81,17 +114,35 @@ init session =
 
                 Nothing ->
                     GlobalFeed
+
+        model =
+            { session = session
+            , timeZone = Time.utc
+            , feedTab = feedTab
+            , feedPage = 1
+            , feed = Loading
+            , users = Loading
+            , minTime = Nothing
+            , maxTime = Nothing
+            , minDate = Nothing
+            , maxDate = Nothing
+            }
     in
-        ( { session = session
-          , timeZone = Time.utc
-          , feedTab = feedTab
-          , feedPage = 1
-          , feed = Loading
-          }
+        ( model
         , Cmd.batch
             [ checkLoggedIn session
-            , fetchFeed session feedTab 1
-                |> Task.attempt CompletedFeedLoad
+            , case feedTab of
+                YourFeed _ ->
+                    fetchMyMeals session 1 model
+                        |> Task.attempt CompletedFeedLoad
+
+                GlobalFeed ->
+                    fetchAllMeals session 1 model
+                        |> Task.attempt CompletedFeedLoad
+
+                AllUsers ->
+                    fetchUsers session 1
+                        |> Task.attempt CompletedUsersLoad
             , Task.perform GotTimeZone Time.here
             , Task.perform (\_ -> PassedSlowLoadThreshold) Loading.slowThreshold
             ]
@@ -111,34 +162,54 @@ view model =
             , div [ class "container page" ]
                 [ div [ class "row" ]
                     [ div [ class "col-md-9" ] <|
-                        case model.feed of
-                            -- TODO: Renderear user en all meal
-                            Loaded feed ->
-                                [ div [ class "feed-toggle" ] <|
-                                    List.concat
-                                        [ [ viewTabs
-                                                (Session.cred model.session)
-                                                model.feedTab
-                                          ]
-                                        , Feed.viewMeals model.timeZone feed
-                                            |> List.map (Html.map GotFeedMsg)
+                        case model.feedTab of
+                            AllUsers ->
+                                case model.users of
+                                    Loaded profileList ->
+                                        [ div [ class "feed-toggle" ] <|
+                                            List.concat
+                                                [ [ viewTabs
+                                                        (Session.cred model.session)
+                                                        model.feedTab
+                                                  ]
+                                                , profileList
+                                                    |> List.map (viewPreview (Session.cred model.session) model.timeZone)
+                                                ]
                                         ]
-                                ]
 
-                            Loading ->
-                                []
+                                    Loading ->
+                                        []
 
-                            LoadingSlowly ->
-                                [ Loading.icon ]
+                                    LoadingSlowly ->
+                                        [ Loading.icon ]
 
-                            Failed ->
-                                [ Loading.error "feed" ]
-                    , div [ class "col-md-3" ] <|
-                        [ div [ class "sidebar" ] <|
-                            [ p [] [ text "Filter Meals" ]
-                            , div [] []
-                            ]
-                        ]
+                                    Failed ->
+                                        [ Loading.error "feed" ]
+
+                            _ ->
+                                case model.feed of
+                                    -- TODO: Renderear user en all meal
+                                    Loaded feed ->
+                                        [ div [ class "feed-toggle" ] <|
+                                            List.concat
+                                                [ [ viewTabs
+                                                        (Session.cred model.session)
+                                                        model.feedTab
+                                                  ]
+                                                , Feed.viewMeals model.timeZone feed (isYourFeed model.feedTab)
+                                                    |> List.map (Html.map GotFeedMsg)
+                                                ]
+                                        ]
+
+                                    Loading ->
+                                        []
+
+                                    LoadingSlowly ->
+                                        [ Loading.icon ]
+
+                                    Failed ->
+                                        [ Loading.error "feed" ]
+                    , viewFilters model
                     ]
                 ]
             ]
@@ -153,6 +224,34 @@ viewBanner =
             , p [] [ text "The best way to track your daily calorie intake." ]
             ]
         ]
+
+
+
+--- USERS
+
+
+viewPreview : Maybe Cred -> Time.Zone -> ProfileWithUsername -> Html Msg
+viewPreview maybeCred timeZone profileFull =
+    let
+        profile =
+            profileFull.profile
+
+        username =
+            profileFull.username
+
+        calories =
+            String.fromInt <| Profile.calories profile
+    in
+        div [ class "article-preview" ]
+            [ div [ class "article-meta" ]
+                [ a [ Route.href (Route.Profile username) ]
+                    [ img [ Avatar.src (Profile.avatar profile) ] [] ]
+                , div [ class "info" ]
+                    [ Author.view username
+                    , span [] [ text <| "Calories: " ++ calories ++ " (cal)" ]
+                    ]
+                ]
+            ]
 
 
 
@@ -204,7 +303,59 @@ allMeals =
 
 allUsers : ( String, Msg )
 allUsers =
-    ( "All Users", ClickedTab AllUsers )
+    ( "All Users", ClickedAllUsersTab )
+
+
+intToOption : Int -> Html msg
+intToOption int =
+    option [ value (String.fromInt int) ]
+        [ text <| String.fromInt int ++ ":00" ]
+
+
+viewFilters { minTime, maxTime, minDate, maxDate } =
+    let
+        minTimeRange =
+            List.range 0 23
+
+        maxTimeRange =
+            List.range (Maybe.withDefault 0 minTime) 23
+
+        emptyOption =
+            option [ value "" ] [ text "Select an option" ]
+    in
+        div [ class "col-md-3" ] <|
+            [ div [ class "sidebar" ] <|
+                [ p [] [ text "Filter Meals" ]
+                , fieldset [ class "form-group" ]
+                    [ label [] [ text "Min time (hs)" ]
+                    , select
+                        [ class "form-control form-control-lg"
+                        , onInput EnteredMinTime
+                        ]
+                        (emptyOption :: (List.map intToOption minTimeRange))
+                    , label [] [ text "Max time (hs)" ]
+                    , select
+                        [ class "form-control form-control-lg"
+                        , onInput EnteredMaxTime
+                        ]
+                        (emptyOption :: (List.map intToOption maxTimeRange))
+                    ]
+                , fieldset [ class "form-group" ]
+                    [ label [] [ text "Min date (DD/MM/YYYY)" ]
+                    , input
+                        [ class "form-control form-control-lg"
+                        , onInput EnteredMinDate
+                        ]
+                        []
+                    , label [] [ text "Max date (DD/MM/YYYY)" ]
+                    , input
+                        [ class "form-control form-control-lg"
+                        , onInput EnteredMaxDate
+                        ]
+                        []
+                    ]
+                ]
+            ]
 
 
 
@@ -213,12 +364,18 @@ allUsers =
 
 type Msg
     = ClickedTab FeedTab
+    | ClickedAllUsersTab
     | ClickedFeedPage Int
     | CompletedFeedLoad (Result Http.Error Feed.Model)
+    | CompletedUsersLoad (Result Http.Error (List ProfileWithUsername))
     | GotTimeZone Time.Zone
     | GotFeedMsg Feed.Msg
     | GotSession Session
     | PassedSlowLoadThreshold
+    | EnteredMinTime String
+    | EnteredMaxTime String
+    | EnteredMinDate String
+    | EnteredMaxDate String
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -226,15 +383,40 @@ update msg model =
     case msg of
         ClickedTab tab ->
             ( { model | feedTab = tab }
-            , fetchFeed model.session tab 1
-                |> Task.attempt CompletedFeedLoad
+            , case model.feedTab of
+                YourFeed _ ->
+                    fetchMyMeals model.session 1 model
+                        |> Task.attempt CompletedFeedLoad
+
+                GlobalFeed ->
+                    fetchAllMeals model.session 1 model
+                        |> Task.attempt CompletedFeedLoad
+
+                AllUsers ->
+                    fetchUsers model.session 1
+                        |> Task.attempt CompletedUsersLoad
+            )
+
+        ClickedAllUsersTab ->
+            ( { model | feedTab = AllUsers }
+            , fetchUsers model.session 1
+                |> Task.attempt CompletedUsersLoad
             )
 
         ClickedFeedPage page ->
             ( { model | feedPage = page }
-            , fetchFeed model.session model.feedTab page
-                |> Task.andThen (\feed -> Task.map (\_ -> feed) scrollToTop)
-                |> Task.attempt CompletedFeedLoad
+            , case model.feedTab of
+                YourFeed _ ->
+                    fetchMyMeals model.session page model
+                        |> Task.attempt CompletedFeedLoad
+
+                GlobalFeed ->
+                    fetchAllMeals model.session page model
+                        |> Task.attempt CompletedFeedLoad
+
+                AllUsers ->
+                    fetchUsers model.session page
+                        |> Task.attempt CompletedUsersLoad
             )
 
         CompletedFeedLoad (Ok feed) ->
@@ -242,6 +424,12 @@ update msg model =
 
         CompletedFeedLoad (Err error) ->
             ( { model | feed = Failed }, Cmd.none )
+
+        CompletedUsersLoad (Ok users) ->
+            ( { model | users = Loaded users }, Cmd.none )
+
+        CompletedUsersLoad (Err _) ->
+            ( { model | users = Failed }, Cmd.none )
 
         GotFeedMsg subMsg ->
             case model.feed of
@@ -283,13 +471,123 @@ update msg model =
             in
                 ( { model | feed = feed }, Cmd.none )
 
+        EnteredMinTime sint ->
+            let
+                newModel =
+                    { model | minTime = String.toInt sint }
+            in
+                ( newModel
+                , fetchMyMeals newModel.session newModel.feedPage newModel
+                    |> Task.andThen (\feed -> Task.map (\_ -> feed) scrollToTop)
+                    |> Task.attempt CompletedFeedLoad
+                )
+
+        EnteredMaxTime sint ->
+            let
+                newModel =
+                    { model | maxTime = String.toInt sint }
+            in
+                ( newModel
+                , fetchMyMeals newModel.session newModel.feedPage newModel
+                    |> Task.andThen (\feed -> Task.map (\_ -> feed) scrollToTop)
+                    |> Task.attempt CompletedFeedLoad
+                )
+
+        EnteredMinDate sDate ->
+            let
+                formatted =
+                    sDate
+                        |> String.split "/"
+                        |> List.reverse
+                        |> String.join "-"
+                        |> Iso8601.toTime
+                        |> Result.toMaybe
+
+                shouldRequest =
+                    String.isEmpty sDate || isJust formatted
+
+                newModel =
+                    { model | minDate = formatted }
+            in
+                ( newModel
+                , if shouldRequest then
+                    fetchMyMeals newModel.session newModel.feedPage newModel
+                        |> Task.andThen (\feed -> Task.map (\_ -> feed) scrollToTop)
+                        |> Task.attempt CompletedFeedLoad
+                  else
+                    Cmd.none
+                )
+
+        EnteredMaxDate sDate ->
+            let
+                formatted =
+                    sDate
+                        |> String.split "/"
+                        |> List.reverse
+                        |> String.join "-"
+                        |> Iso8601.toTime
+                        |> Result.toMaybe
+
+                newModel =
+                    { model | maxDate = formatted }
+
+                shouldRequest =
+                    String.isEmpty sDate || isJust formatted
+            in
+                ( newModel
+                , if shouldRequest then
+                    fetchMyMeals newModel.session newModel.feedPage newModel
+                        |> Task.andThen (\feed -> Task.map (\_ -> feed) scrollToTop)
+                        |> Task.attempt CompletedFeedLoad
+                  else
+                    Cmd.none
+                )
+
 
 
 -- HTTP
 
 
-fetchFeed : Session -> FeedTab -> Int -> Task Http.Error Feed.Model
-fetchFeed session feedTabs page =
+type alias Filters a =
+    { a
+        | minDate : Maybe Posix
+        , maxDate : Maybe Posix
+        , minTime : Maybe Int
+        , maxTime : Maybe Int
+    }
+
+
+makeFilters : Filters a -> List QueryParameter
+makeFilters filters =
+    let
+        _ =
+            Debug.log "" filters.minTime
+
+        minTimeFilter =
+            filters.minTime
+                |> Maybe.map (\mind -> [ Url.Builder.int "minTime" mind ])
+                |> Maybe.withDefault []
+
+        maxTimeFilter =
+            filters.maxTime
+                |> Maybe.map (\mind -> [ Url.Builder.int "maxTime" mind ])
+                |> Maybe.withDefault []
+
+        minDateFilter =
+            filters.minDate
+                |> Maybe.map (\mdate -> [ Url.Builder.string "minDate" (Iso8601.fromTime mdate) ])
+                |> Maybe.withDefault []
+
+        maxDateFilter =
+            filters.maxDate
+                |> Maybe.map (\mdate -> [ Url.Builder.string "maxDate" (Iso8601.fromTime mdate) ])
+                |> Maybe.withDefault []
+    in
+        minTimeFilter ++ maxTimeFilter ++ minDateFilter ++ maxDateFilter
+
+
+fetchMyMeals : Session -> Int -> Filters a -> Task Http.Error Feed.Model
+fetchMyMeals session page filters =
     let
         maybeCred =
             Session.cred session
@@ -297,23 +595,52 @@ fetchFeed session feedTabs page =
         decoder =
             Feed.decoder maybeCred articlesPerPage
 
+        filterParams =
+            makeFilters filters
+
+        params =
+            filterParams ++ PaginatedList.params { page = page, resultsPerPage = articlesPerPage }
+    in
+        Api.get (Endpoint.mealsFeed params) maybeCred decoder
+            |> Http.toTask
+            |> Task.map (Feed.init session)
+
+
+fetchAllMeals : Session -> Int -> Filters a -> Task Http.Error Feed.Model
+fetchAllMeals session page { minDate, maxDate, minTime, maxTime } =
+    let
+        maybeCred =
+            Session.cred session
+
+        decoder =
+            Feed.decoder maybeCred articlesPerPage
+
+        filterParams =
+            [ ("minDate")
+            , ("maxDate")
+            , ("minTime")
+            , ("maxTime")
+            ]
+
         params =
             PaginatedList.params { page = page, resultsPerPage = articlesPerPage }
-
-        request =
-            case feedTabs of
-                YourFeed cred ->
-                    Api.get (Endpoint.mealsFeed params) maybeCred decoder
-
-                GlobalFeed ->
-                    Api.get (Endpoint.meals params) maybeCred decoder
-
-                AllUsers ->
-                    -- TODO: Change
-                    Api.get Endpoint.users maybeCred decoder
     in
-        Http.toTask request
+        Api.get (Endpoint.meals params) maybeCred decoder
+            |> Http.toTask
             |> Task.map (Feed.init session)
+
+
+fetchUsers : Session -> Int -> Task Http.Error (List ProfileWithUsername)
+fetchUsers session page =
+    let
+        maybeCred =
+            Session.cred session
+
+        params =
+            PaginatedList.params { page = page, resultsPerPage = articlesPerPage }
+    in
+        Api.get Endpoint.users maybeCred (Decode.list Profile.decoderFull)
+            |> Http.toTask
 
 
 articlesPerPage : Int
@@ -345,3 +672,14 @@ subscriptions model =
 toSession : Model -> Session
 toSession model =
     model.session
+
+
+
+--- Util
+
+
+maybeIntToString : Maybe Int -> String
+maybeIntToString mint =
+    mint
+        |> Maybe.map String.fromInt
+        |> Maybe.withDefault ""

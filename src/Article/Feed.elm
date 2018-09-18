@@ -89,16 +89,20 @@ init session meals =
 -- VIEW
 
 
-viewMeals : Time.Zone -> Model -> List (Html Msg)
-viewMeals timeZone (Model { meals, session, errors }) =
+viewMeals : Time.Zone -> Model -> Bool -> List (Html Msg)
+viewMeals timeZone (Model { meals, session, errors }) isOwn =
     let
         maybeCred =
             Session.cred session
 
         mealsHtml =
-            PaginatedList.values meals
-                |> groupFeedByDay
-                |> List.map (viewMealsForDay session timeZone)
+            if isOwn then
+                PaginatedList.values meals
+                    |> groupFeedByDay
+                    |> List.map (viewMealsForDay session timeZone)
+            else
+                PaginatedList.values meals
+                    |> List.map (viewMeal Unknown timeZone)
     in
         Page.viewErrors ClickedDismissErrors errors :: mealsHtml
 

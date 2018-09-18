@@ -215,6 +215,10 @@ view model =
                                                 [ div [ class "articles-toggle" ] <|
                                                     List.concat
                                                         [ [ viewTabs ]
+                                                        , Feed.viewMeals model.timeZone
+                                                            feed
+                                                            True
+                                                            |> List.map (Html.map GotFeedMsg)
 
                                                         -- , Feed.viewArticles model.timeZone feed
                                                         --     |> List.map (Html.map GotFeedMsg)
