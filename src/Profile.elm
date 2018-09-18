@@ -6,6 +6,7 @@ module Profile
         , bio
         , calories
         , username
+        , blocking
         , decoder
         , decoderFull
         )
@@ -35,6 +36,7 @@ type alias Internals =
     { bio : Maybe String
     , avatar : Avatar
     , calories : Int
+    , blocking : Int
     }
 
 
@@ -62,6 +64,11 @@ username p =
     p.username
 
 
+blocking : Profile -> Int
+blocking (Profile info) =
+    info.blocking
+
+
 
 -- SERIALIZATION
 
@@ -72,6 +79,7 @@ decoder =
         |> required "bio" (Decode.nullable Decode.string)
         |> required "image" Avatar.decoder
         |> required "expectedCalories" Decode.int
+        |> required "blocking" Decode.int
         |> Decode.map Profile
 
 

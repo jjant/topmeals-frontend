@@ -10,6 +10,7 @@ port module Api
         , logout
         , post
         , put
+        , patch
         , register
         , settings
         , storeCredWith
@@ -259,6 +260,19 @@ put : Endpoint -> Cred -> Body -> Decoder a -> Http.Request a
 put url cred body decoder =
     Endpoint.request
         { method = "PUT"
+        , url = url
+        , expect = Http.expectJson decoder
+        , headers = [ credHeader cred ]
+        , body = body
+        , timeout = Nothing
+        , withCredentials = False
+        }
+
+
+patch : Endpoint -> Cred -> Body -> Decoder a -> Http.Request a
+patch url cred body decoder =
+    Endpoint.request
+        { method = "PATCH"
         , url = url
         , expect = Http.expectJson decoder
         , headers = [ credHeader cred ]

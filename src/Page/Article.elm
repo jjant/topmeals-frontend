@@ -241,9 +241,7 @@ update msg model =
             ( model, Route.replaceUrl (Session.navKey model.session) Route.Home )
 
         CompletedDeleteMeal (Err error) ->
-            ( { model | errors = Api.addServerError model.errors }
-            , Log.error
-            )
+            ( model, Route.replaceUrl (Session.navKey model.session) Route.Home )
 
         GotTimeZone tz ->
             ( { model | timeZone = tz }, Cmd.none )

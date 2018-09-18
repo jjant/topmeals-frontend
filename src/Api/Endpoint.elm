@@ -15,6 +15,8 @@ module Api.Endpoint
         , meals
         , mealsFeed
         , validateUser
+        , unlock
+        , deleteUser
         )
 
 import Article.Slug as Slug exposing (Slug)
@@ -88,6 +90,16 @@ login =
 user : Endpoint
 user =
     url [ "user" ] []
+
+
+unlock : Username -> Endpoint
+unlock username =
+    url [ "user", Username.toString username, "unlock" ] []
+
+
+deleteUser : Username -> Endpoint
+deleteUser username =
+    url [ "user", Username.toString username ] []
 
 
 users : Endpoint

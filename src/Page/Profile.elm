@@ -10,6 +10,7 @@ import Article.Feed as Feed
 import Author exposing (Author(..), FollowedAuthor, UnfollowedAuthor)
 import Avatar exposing (Avatar)
 import Html exposing (..)
+import Html.Events exposing (onClick)
 import Html.Attributes exposing (..)
 import Http
 import Loading
@@ -24,6 +25,7 @@ import Time
 import Url.Builder
 import Username exposing (Username)
 import Viewer exposing (Viewer)
+import Json.Decode as Decode
 
 
 -- MODEL
@@ -156,6 +158,19 @@ articlesPerPage =
 
 
 
+-- Cred has User CRUD permission
+
+
+hasCrudPermission : Cred -> Bool
+hasCrudPermission cred =
+    let
+        role =
+            Api.role cred
+    in
+        role == Api.Manager || role == Api.Admin
+
+
+
 -- VIEW
 
 
@@ -192,6 +207,9 @@ view model =
 
                         username =
                             Author.username author
+
+                        isBlocked =
+                            Profile.blocking profile > 3
                     in
                         div [ class "profile-page" ]
                             [ Page.viewErrors ClickedDismissErrors model.errors
@@ -206,6 +224,22 @@ view model =
                                             ]
                                         ]
                                     ]
+                                , Session.cred model.session
+                                    |> Maybe.map
+                                        (\cred ->
+                                            if hasCrudPermission cred then
+                                                div []
+                                                    ([ deleteButton cred ]
+                                                        ++ (if isBlocked then
+                                                                [ unblockButton cred ]
+                                                            else
+                                                                []
+                                                           )
+                                                    )
+                                            else
+                                                text ""
+                                        )
+                                    |> Maybe.withDefault (text "")
                                 ]
                             , case model.feed of
                                 Loaded feed ->
@@ -247,6 +281,18 @@ view model =
                 Failed _ ->
                     Loading.error "profile"
         }
+
+
+deleteButton : Cred -> Html Msg
+deleteButton cred =
+    button [ class "btn btn-outline-danger btn-sm", onClick (ClickedDeleteProfile cred) ]
+        [ i [ class "ion-trash-a" ] [], text " Delete User" ]
+
+
+unblockButton : Cred -> Html Msg
+unblockButton cred =
+    button [ class "btn btn-outline-info btn-sm", onClick (ClickedUnblockProfile cred) ]
+        [ i [ class "ion-edit" ] [], text " Unblock User" ]
 
 
 
@@ -304,6 +350,10 @@ type Msg
     | GotFeedMsg Feed.Msg
     | GotSession Session
     | PassedSlowLoadThreshold
+    | ClickedDeleteProfile Cred
+    | CompletedDeleteProfile (Result Http.Error ())
+    | ClickedUnblockProfile Cred
+    | CompletedUnblockProfile (Result Http.Error ())
 
 
 update : Msg -> Model -> ( Model, Cmd Msg )
@@ -379,6 +429,40 @@ update msg model =
                             other
             in
                 ( { model | feed = feed }, Cmd.none )
+
+        ClickedDeleteProfile cred ->
+            ( model
+            , delete (currentUsername model) cred
+                |> Http.send CompletedDeleteProfile
+            )
+
+        CompletedDeleteProfile (Ok ()) ->
+            ( model, Route.replaceUrl (Session.navKey model.session) Route.Home )
+
+        CompletedDeleteProfile (Err error) ->
+            ( { model | errors = Api.addServerError model.errors }
+            , Log.error
+            )
+
+        ClickedUnblockProfile cred ->
+            ( model, unblock (currentUsername model) cred |> Http.send CompletedUnblockProfile )
+
+        CompletedUnblockProfile _ ->
+            ( model, Route.replaceUrl (Session.navKey model.session) (Route.Profile (currentUsername model)) )
+
+
+
+--
+
+
+delete : Username -> Cred -> Http.Request ()
+delete username cred =
+    Api.delete (Endpoint.deleteUser username) cred Http.emptyBody (Decode.succeed ())
+
+
+unblock : Username -> Cred -> Http.Request ()
+unblock username cred =
+    Api.patch (Endpoint.unlock username) cred Http.emptyBody (Decode.succeed ())
 
 
 
